@@ -1,0 +1,53 @@
+{
+  "phase0": {
+    "name": "shared-schema-and-crm-merge",
+    "branch": "phase0/shared-schema",
+    "worktree": "../mira-phase0",
+    "progress_file": "PROGRESS-phase0.md",
+    "prompt": "Read CLAUDE.md and SPEC.md fully. Build Phase 0: the shared data layer (packages/shared-db, packages/shared-types) and merge the existing CRM repo and lead-follow-up-agent repo into apps/crm and apps/lead-agent under this monorepo, both reading/writing the shared schema. Do not build any other module. When complete and working, commit, tag the commit phase0-complete, and update PROGRESS-phase0.md with a clear DONE status."
+  },
+  "modules": [
+    {
+      "name": "dashboard",
+      "branch": "feature/dashboard",
+      "worktree": "../mira-dashboard",
+      "progress_file": "PROGRESS-dashboard.md",
+      "prompt": "Read CLAUDE.md and SPEC.md. Build apps/dashboard: the Today view shell per SPEC.md section 'Core architecture'. Read packages/shared-* for data contracts, do not redefine them. Update PROGRESS-dashboard.md as you go."
+    },
+    {
+      "name": "trackers",
+      "branch": "feature/trackers",
+      "worktree": "../mira-trackers",
+      "progress_file": "PROGRESS-trackers.md",
+      "prompt": "Read CLAUDE.md and SPEC.md. Build apps/trackers (days/goals tracking, module 10). Read packages/shared-* for contracts. Update PROGRESS-trackers.md as you go."
+    },
+    {
+      "name": "social-assistant",
+      "branch": "feature/social-assistant",
+      "worktree": "../mira-social",
+      "progress_file": "PROGRESS-social.md",
+      "prompt": "Read CLAUDE.md and SPEC.md, especially module 7 (Social Media Assistant). Read brand-kit/BRAND-KIT.md and treat it as the authoritative style contract for all generated visuals -- colors, typography hierarchy, logo lockup, recurring motifs, and poster generation rules. Build apps/social-assistant: content calendar, poster generation from brand kit + listing data, draft-and-hold posting (no live posting yet), performance monitoring hooks. Flag in PROGRESS-social.md if any brand-kit value looks like it needs founder confirmation (see 'Open items' section of BRAND-KIT.md) rather than guessing. Update PROGRESS-social.md as you go."
+    },
+    {
+      "name": "comms-hub",
+      "branch": "feature/comms-hub",
+      "worktree": "../mira-comms",
+      "progress_file": "PROGRESS-comms.md",
+      "prompt": "Read CLAUDE.md and SPEC.md, especially module 6 (Communications Hub). Build apps/comms-hub: unified inbox structure for email + WhatsApp (BSP-agnostic integration layer — Interakt/Wati/Twilio), notification priority tiers, role-based filtering. Draft-and-hold by default, no live sends. Update PROGRESS-comms.md as you go."
+    },
+    {
+      "name": "pipeline-listings",
+      "branch": "feature/pipeline-listings",
+      "worktree": "../mira-pipeline",
+      "progress_file": "PROGRESS-pipeline.md",
+      "prompt": "Read CLAUDE.md and SPEC.md, modules 2 and 3. Build apps/pipeline: transaction pipeline stages and listing management, reading/writing shared schema. Update PROGRESS-pipeline.md as you go."
+    },
+    {
+      "name": "inventory-developer",
+      "branch": "feature/inventory-developer",
+      "worktree": "../mira-inventory",
+      "progress_file": "PROGRESS-inventory.md",
+      "prompt": "Read CLAUDE.md and SPEC.md, module 4 (Seller/Developer Inventory). Build apps/inventory: developer partner directory, semi-manual inventory ingestion (CSV/paste/screenshot-parse, NOT credential-based scraping), MOU compliance tracking, buyer-demand-to-inventory matching against CRM leads. Update PROGRESS-inventory.md as you go."
+    }
+  ]
+}
