@@ -166,10 +166,21 @@ For whoever picks this up (a human, or a future module-branch session per MODULE
 - Did **not** apply any migration to a real Supabase project (no credentials available here) -- see Blockers.
 
 ## phase0-complete
-Tagged on this run's final commit. Completion criterion from MODULES.json's phase0 prompt -- "shared schema/types
-exist under packages/, and both apps/crm and apps/lead-agent read/write it" -- is met and verified locally to the
-fullest extent possible without live Supabase credentials (which don't exist anywhere in this repo; see Blockers).
-Per CLAUDE.md, missing credentials are flagged rather than guessed at or blocking indefinitely -- the remaining
-"point both apps at the same real database" step is an environment/ops action for a human with access, not
-something this or any future automated run can do blind. Module branches (Step 2 in the scheduled orchestration
-prompt) can now proceed.
+Completion criterion from MODULES.json's phase0 prompt -- "shared schema/types exist under packages/, and both
+apps/crm and apps/lead-agent read/write it" -- is met and verified locally to the fullest extent possible without
+live Supabase credentials (which don't exist anywhere in this repo; see Blockers). Per CLAUDE.md, missing
+credentials are flagged rather than guessed at or blocking indefinitely -- the remaining "point both apps at the
+same real database" step is an environment/ops action for a human with access, not something this or any future
+automated run can do blind.
+
+**The tag itself could NOT be pushed this run.** `git tag -a phase0-complete ... && git push origin
+phase0-complete` was attempted on the final commit (`6f94f77`); the push consistently failed with `HTTP 403` /
+"the remote end hung up unexpectedly" (confirmed not transient -- retried once, same error). This session's git
+credentials appear scoped to pushing the `claude/*` branch only, not tag refs, and no GitHub-API-based
+tag-creation tool was available either (only read tools -- `get_tag`/`list_tags` -- were exposed). **A human needs
+to run `git tag phase0-complete 6f94f77 && git push origin phase0-complete` (or create the tag via the GitHub UI/
+API) once this branch is reviewed** -- until that tag exists on the remote, future automated runs following the
+orchestration prompt will correctly see Phase 0 as still incomplete (per the "check whether the git tag
+phase0-complete exists" step) and will re-enter Phase 0 rather than proceeding to Step 2 module work, even though
+the code itself is done. This is the safe failure mode (no module work starts on a false premise) but it does mean
+Step 2 stays blocked until a human pushes the tag.
