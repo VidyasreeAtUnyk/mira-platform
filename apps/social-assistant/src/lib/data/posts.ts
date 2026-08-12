@@ -91,7 +91,7 @@ export async function createPost(input: CreateSocialPostInput): Promise<SocialPo
  * Every allowed transition, all within draft-and-hold. There is
  * deliberately no "posted" state to transition into — see module header.
  */
-const ALLOWED_TRANSITIONS: Record<PostStatus, PostStatus[]> = {
+export const ALLOWED_TRANSITIONS: Record<PostStatus, PostStatus[]> = {
   draft: ['pending_approval', 'held'],
   pending_approval: ['approved', 'held', 'draft'],
   approved: ['held', 'draft'],

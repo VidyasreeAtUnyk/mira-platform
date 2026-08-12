@@ -39,3 +39,52 @@ export const SUGGESTION_TYPES = ["followup_message", "upgrade_proposal", "lead_s
 export const SUGGESTION_STATUSES = ["pending", "approved", "rejected", "sent"];
 export const PROPERTY_TIERS = ["standard", "upgrade"];
 export const AUDIT_ACTORS = ["agent", "human"];
+// ============================================================
+// Social content calendar (module 7 -- added post-Phase-0 by
+// apps/social-assistant, packages/shared-db/migrations/001_social_posts.sql).
+// Promoted here (not kept apps/social-assistant-local) because post/poster
+// status is read by more than just the social-assistant UI:
+//   * SPEC.md module 2 (Dashboard / "Today view") -- pending-approval posts
+//     are exactly the kind of thing the review/approval queue surfaces.
+//   * SPEC.md module 11 (Monthly report) rolls up marketing ROI, which reads
+//     social_posts + social_post_metrics.
+// See PROGRESS-social.md Notes for the full promotion rationale, and
+// packages/shared-db/migrations/001_social_posts.sql's header for the schema
+// side of this decision.
+//
+// Deliberately NOT promoted (stay apps/social-assistant-local, see that
+// app's src/types/social.ts and db/schema.sql): `listing_marketing_details`
+// (a properties sidecar awaiting a real fold-in decision), developer
+// co-branding compliance profiles (placeholder pending module 4's real
+// developer partner directory), `ai_call_log` (internal budget-governor
+// bookkeeping, same category as apps/lead-agent's app-local run_state/
+// run_metrics), and `ViewerRole`/`canCreatePosters` (a stand-in for RBAC that
+// hasn't landed in the shared schema yet, see SPEC.md's RBAC table).
+// ============================================================
+/**
+ * Draft-and-hold only, per CLAUDE.md/SPEC.md: nothing marks a post as
+ * actually "posted"/"published" because no live posting integration exists,
+ * and there shouldn't be one at this stage. Extending this enum with a real
+ * "posted" state is a deliberate, reviewed addition for whenever a live
+ * posting integration lands -- not something to guess at now.
+ */
+export const POST_STATUSES = ["draft", "pending_approval", "approved", "held"];
+export const SOCIAL_PLATFORMS = ["instagram", "facebook", "linkedin", "tiktok", "google_business"];
+export const POST_KINDS = ["new_listing", "price_update", "sold", "market_update", "brand_general"];
+/**
+ * SPEC.md module 7: "some developers have strict marketing compliance
+ * rules" -- own-branded content is unrestricted (subject to the normal
+ * approval queue); co_branded content additionally names a developer
+ * partner and must be checked against that developer's brand-usage rules
+ * before approval (see apps/social-assistant's local DeveloperBrandProfile).
+ */
+export const BRAND_MODES = ["own", "co_branded"];
+export const SOCIAL_METRIC_TYPES = [
+    "impressions",
+    "reach",
+    "likes",
+    "comments",
+    "shares",
+    "saves",
+    "link_clicks",
+];

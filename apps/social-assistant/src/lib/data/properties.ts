@@ -26,6 +26,37 @@ export async function listProperties(): Promise<Property[]> {
   return (data ?? []) as Property[];
 }
 
+/**
+ * Bulk version of `getListingForPoster` -- every shared `properties` row
+ * left-joined with its (optional) marketing sidecar row. Used by the poster
+ * generation flow's listing picker (src/app/posters/new) so it doesn't have
+ * to N+1 `getListingForPoster` per row.
+ */
+export async function listListingsForPoster(): Promise<ListingForPoster[]> {
+  if (!hasSupabaseCredentials()) {
+    return FIXTURE_PROPERTIES.map((property) => ({
+      ...property,
+      ...FIXTURE_MARKETING_DETAILS.find((m) => m.property_id === property.id),
+    }));
+  }
+
+  const supabase = createServiceClient();
+  const [{ data: properties, error: propErr }, { data: marketing, error: mdErr }] = await Promise.all([
+    supabase.from('properties').select('*').order('created_at', { ascending: false }),
+    supabase.from('listing_marketing_details').select('*'),
+  ]);
+  if (propErr) throw new Error(`Failed to load properties: ${propErr.message}`);
+  if (mdErr) throw new Error(`Failed to load listing marketing details: ${mdErr.message}`);
+
+  const marketingByProperty = new Map(
+    ((marketing ?? []) as ListingMarketingDetails[]).map((m) => [m.property_id, m])
+  );
+  return ((properties ?? []) as Property[]).map((property) => ({
+    ...property,
+    ...marketingByProperty.get(property.id),
+  }));
+}
+
 export async function getListingForPoster(propertyId: string): Promise<ListingForPoster | null> {
   if (!hasSupabaseCredentials()) {
     const property = FIXTURE_PROPERTIES.find((p) => p.id === propertyId);

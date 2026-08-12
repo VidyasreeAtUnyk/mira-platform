@@ -2,11 +2,21 @@
  * apps/social-assistant's local type surface.
  *
  * Per CLAUDE.md ("don't redefine types that already exist there") this
- * module imports `Property` and `Agent` from `@mira/shared-types` rather
- * than forking them. Everything below is genuinely local to this module:
- * the content calendar, poster generation, and (stub) performance
- * monitoring concepts don't exist in the shared schema and aren't owned by
- * any other module.
+ * module imports `Property`/`Agent` AND (as of the schema-placement
+ * decision below) `PostStatus`/`SocialPlatform`/`PostKind`/`BrandMode`/
+ * `SocialPost`/`CreateSocialPostInput`/`SocialMetricType`/
+ * `SocialPostMetric` from `@mira/shared-types` rather than forking them --
+ * those were promoted to shared-types + packages/shared-db/migrations/
+ * 001_social_posts.sql because the Dashboard (Today view / review-approval
+ * queue) and Monthly report (marketing ROI) are both expected to read
+ * post/poster status. See PROGRESS-social.md Notes for the full writeup and
+ * packages/shared-types/src/domain.ts's "Social content calendar" section
+ * for what stayed local vs. what promoted.
+ *
+ * Everything below IS still genuinely local to this module: poster
+ * generation inputs, the marketing-sidecar concept, developer co-branding
+ * compliance (a placeholder ahead of module 4's real directory), viewer
+ * role/RBAC stand-in, and the (stub) performance-monitoring result shape.
  *
  * Known gap (see PROGRESS-social.md Notes): the shared `properties` table
  * (packages/shared-db/schema.sql) only has address/area/type/price/bedrooms/
@@ -23,39 +33,50 @@
  * pass to fold the marketing-relevant fields (bathrooms, developer,
  * community, photos) into the real shared schema.
  */
-import type { Property } from '@mira/shared-types';
+import type {
+  Property,
+  PostStatus,
+  SocialPlatform,
+  PostKind,
+  BrandMode,
+  SocialPost,
+  CreateSocialPostInput,
+  SocialMetricType,
+  SocialPostMetric,
+} from '@mira/shared-types';
+import {
+  POST_STATUSES,
+  SOCIAL_PLATFORMS,
+  POST_KINDS,
+  BRAND_MODES,
+  SOCIAL_METRIC_TYPES,
+} from '@mira/shared-types';
 
-export type { Property };
+export type {
+  Property,
+  PostStatus,
+  SocialPlatform,
+  PostKind,
+  BrandMode,
+  SocialPost,
+  CreateSocialPostInput,
+  SocialMetricType,
+  SocialPostMetric,
+};
+export { POST_STATUSES, SOCIAL_PLATFORMS, POST_KINDS, BRAND_MODES, SOCIAL_METRIC_TYPES };
+
+/** @deprecated Local alias kept only so existing imports of `Platform` in this app don't all need renaming in one pass. Use `SocialPlatform` (from `@mira/shared-types`) directly in new code. */
+export type Platform = SocialPlatform;
+/** @deprecated see `Platform` above -- use `SOCIAL_PLATFORMS` directly in new code. */
+export const PLATFORMS = SOCIAL_PLATFORMS;
+/** @deprecated see `Platform` above -- use `SocialMetricType` directly in new code. */
+export type MetricType = SocialMetricType;
+/** @deprecated see `Platform` above -- use `SOCIAL_METRIC_TYPES` directly in new code. */
+export const METRIC_TYPES = SOCIAL_METRIC_TYPES;
 
 // ============================================================
 // Content calendar
 // ============================================================
-
-/**
- * Draft-and-hold only, per CLAUDE.md/SPEC.md: nothing in this module marks
- * a post as actually "posted" or "published" because there is no live
- * posting integration yet and there shouldn't be one at this stage. If/when
- * a real posting integration lands, that's a deliberate, reviewed addition
- * to this enum -- not something to guess at now.
- */
-export const POST_STATUSES = ['draft', 'pending_approval', 'approved', 'held'] as const;
-export type PostStatus = (typeof POST_STATUSES)[number];
-
-export const PLATFORMS = ['instagram', 'facebook', 'linkedin', 'tiktok', 'google_business'] as const;
-export type Platform = (typeof PLATFORMS)[number];
-
-export const POST_KINDS = ['new_listing', 'price_update', 'sold', 'market_update', 'brand_general'] as const;
-export type PostKind = (typeof POST_KINDS)[number];
-
-/**
- * SPEC.md module 7 compliance note: "some developers have strict marketing
- * compliance rules" -- own-branded content is unrestricted (subject to the
- * normal approval queue); co_branded content additionally carries a
- * developer_partner_name and must be checked against that developer's
- * brand-usage rules (see DeveloperBrandProfile) before approval.
- */
-export const BRAND_MODES = ['own', 'co_branded'] as const;
-export type BrandMode = (typeof BRAND_MODES)[number];
 
 /**
  * SPEC.md RBAC table: poster creation is "Founder-only-for-now" (opens to
@@ -98,38 +119,6 @@ export interface ListingMarketingDetails {
  */
 export type ListingForPoster = Property & Partial<Omit<ListingMarketingDetails, 'id' | 'property_id' | 'created_at'>>;
 
-export interface SocialPost {
-  id: string;
-  kind: PostKind;
-  platform: Platform;
-  status: PostStatus;
-  brand_mode: BrandMode;
-  /** Required when brand_mode = 'co_branded'; null for 'own'. */
-  developer_partner_name: string | null;
-  /** FK into shared `properties`, null for posts not tied to a listing (e.g. market_update, brand_general). */
-  property_id: string | null;
-  caption: string;
-  /** Whether `caption` came from the template generator ('template') or a future AI path ('ai'). Always 'template' today -- see src/lib/ai/. */
-  caption_source: 'template' | 'ai';
-  scheduled_for: string | null;
-  created_by_role: ViewerRole;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CreateSocialPostInput {
-  kind: PostKind;
-  platform: Platform;
-  brand_mode: BrandMode;
-  developer_partner_name?: string;
-  property_id?: string;
-  caption?: string;
-  scheduled_for?: string;
-  created_by_role: ViewerRole;
-  notes?: string;
-}
-
 export interface UpdateSocialPostStatusInput {
   status: PostStatus;
 }
@@ -156,24 +145,6 @@ export interface DeveloperBrandProfile {
 // ============================================================
 // Performance monitoring (stub -- no live channel to pull from yet)
 // ============================================================
-
-export const METRIC_TYPES = ['impressions', 'reach', 'likes', 'comments', 'shares', 'saves', 'link_clicks'] as const;
-export type MetricType = (typeof METRIC_TYPES)[number];
-
-/**
- * Schema/structure only, per this session's scope: there is no live posting
- * integration, so there is no live channel to pull real metrics from. Rows
- * in `social_post_metrics` are never fabricated -- `source` distinguishes a
- * genuine future ingestion ('platform_api') from anything else, and this
- * module currently never writes rows with real numbers. See
- * src/lib/data/metrics.ts.
- */
-export interface SocialPostMetric {
-  id: string;
-  post_id: string;
-  platform: Platform;
-  metric_type: MetricType;
-  value: number;
-  source: 'platform_api' | 'manual_entry';
-  recorded_at: string;
-}
+// `MetricType`/`METRIC_TYPES`/`SocialPostMetric` now come from
+// `@mira/shared-types` (see the promoted re-exports at the top of this
+// file) -- structure/shape is unchanged, only the source of truth moved.
