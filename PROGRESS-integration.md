@@ -131,6 +131,37 @@ Status: needs-human-review
 - No merge conflicts remain unresolved; nothing was left in a broken git
   state.
 
+## Re-verification pass -- 2026-08-12T18:xx UTC
+
+This run's staleness rule flagged this branch as stalled (last commit
+>2h old, status not "done") and told me to resume it, so I independently
+re-checked everything below from scratch (no memory of the prior pass)
+rather than trust its own PROGRESS entry at face value:
+
+- `git log claude/integration..origin/claude/<x>` is empty for all 7
+  merged branches (`shared-schema`, `dashboard`, `trackers`,
+  `social-assistant`, `comms-hub`, `pipeline-listings`,
+  `inventory-developer`) -- confirms every module branch is still fully
+  merged in and none has moved since. Nothing new to merge this run.
+- Searched the working tree for unresolved conflict markers
+  (`<<<<<<<`/`=======`/`>>>>>>>`) -- none found.
+- `packages/shared-db/migrations/` contains exactly `001_trackers_goals.sql`,
+  `002_social_posts.sql`, `003_transaction_pipeline_and_listings.sql`,
+  `004_developer_inventory.sql` -- sequential, no gaps, no duplicates,
+  matching what "Done" above claims.
+- Rebuilt-typechecked `packages/shared-types` with the pinned
+  `typescript@5.6.3` (same pin the prior pass used, for the same
+  `tsconfig.build.json` `rootDir` reason) -- `tsc --noEmit` clean.
+
+Conclusion: nothing mechanical is left to do here. The one open item
+(dashboard cross-module wiring + the `AgentRole` vs. SPEC.md 6-role RBAC
+gap) is still a genuine product decision, not something this pass should
+guess at -- leaving `Status: needs-human-review` unchanged rather than
+marking it `done`, so a future run's staleness check keeps surfacing it
+for a human rather than silently dropping it. Not resubmitting the
+`phase0-complete` tag push attempt this run since it's already present on
+the remote (see "Blockers" below, unchanged).
+
 ## Blockers / needs human input
 
 - See "Needs a product decision" above -- dashboard/notification-tier
