@@ -32,3 +32,23 @@ psql mira_dev -f packages/shared-db/schema.sql
 
 `apps/lead-agent`'s own db client does this automatically against whatever
 `DATABASE_URL` it's given (see `apps/lead-agent/src/db/client.ts`).
+
+## Post-Phase-0 migrations
+
+`schema.sql` is the frozen Phase 0 snapshot. Additions made by module
+branches after Phase 0 land in `migrations/`, one file per addition, applied
+in numeric order **after** `schema.sql`:
+
+```
+psql mira_dev -f packages/shared-db/schema.sql
+psql mira_dev -f packages/shared-db/migrations/001_trackers_goals.sql
+```
+
+- `001_trackers_goals.sql` (apps/trackers, module 10): `goals` and
+  `goal_progress_entries` tables. Promoted to shared rather than kept
+  apps/trackers-local because revenue/activity targets are read by the
+  Today view (module 2) and monthly report (module 11) too -- see the
+  migration file's header and `PROGRESS-trackers.md` for the full reasoning.
+  Additive only; does not touch any Phase 0 table. Verified applying
+  cleanly to a scratch local Postgres 16 database (constraint checks
+  exercised, not just DDL).
