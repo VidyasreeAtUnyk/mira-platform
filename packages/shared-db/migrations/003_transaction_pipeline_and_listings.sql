@@ -1,4 +1,4 @@
--- packages/shared-db/migrations/006_transaction_pipeline_and_listings.sql
+-- packages/shared-db/migrations/003_transaction_pipeline_and_listings.sql
 --
 -- Additive migration for apps/pipeline (Transaction Pipeline + Listing
 -- Management, SPEC.md modules 2 & 3). Per CLAUDE.md's module-boundary rule

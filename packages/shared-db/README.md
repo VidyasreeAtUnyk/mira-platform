@@ -18,6 +18,7 @@ files in numeric order:
 psql mira_dev -f packages/shared-db/schema.sql
 psql mira_dev -f packages/shared-db/migrations/001_trackers_goals.sql
 psql mira_dev -f packages/shared-db/migrations/002_social_posts.sql
+psql mira_dev -f packages/shared-db/migrations/003_transaction_pipeline_and_listings.sql
 ```
 
 Current migrations:
@@ -39,6 +40,15 @@ Current migrations:
        numbered themselves 001 -- renumbered during the integration pass
        (claude/integration) so `migrations/` has a single, unambiguous
        apply order. See PROGRESS-integration.md. -->
+- `003_transaction_pipeline_and_listings.sql` (apps/pipeline, SPEC.md
+  modules 2 & 3): new columns on the shared `properties` table plus a new
+  `listing_price_changes` table. Additive/idempotent, safe to re-run. Any
+  other module reading/writing `properties` (apps/inventory, apps/crm's
+  intelligence page) should be aware these now exist.
+  <!-- Originally numbered 006 on its source branch (apps/pipeline built
+       without visibility into apps/trackers' or apps/social-assistant's
+       migrations); renumbered to 003 during the integration pass for a
+       gap-free sequence. See PROGRESS-integration.md. -->
 
 Tables that stay app-local (not promoted here) keep their own migration
 under the owning app's directory -- e.g. `apps/lead-agent`'s `run_state`/

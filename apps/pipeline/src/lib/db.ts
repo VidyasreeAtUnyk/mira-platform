@@ -40,7 +40,7 @@ const PIPELINE_MIGRATION_PATH = path.join(
   "packages",
   "shared-db",
   "migrations",
-  "006_transaction_pipeline_and_listings.sql",
+  "003_transaction_pipeline_and_listings.sql",
 );
 
 /**
