@@ -12,6 +12,23 @@ import path from "node:path";
 // otherwise silently do string concatenation instead of arithmetic).
 types.setTypeParser(types.builtins.NUMERIC, (val) => (val === null ? null : parseFloat(val)));
 
+// Every date/timestamp field in src/types.ts (created_at, updated_at,
+// listed_at, sold_at, withdrawn_at, changed_at, closed_at,
+// expected_closing_date, ...) is declared as `string`, but pg's default
+// parsers turn `date`/`timestamp`/`timestamptz` columns into JS `Date`
+// objects -- a real bug, not just a type-hygiene nit: a `Date` rendered
+// directly as a React child throws ("Objects are not valid as a React
+// child"), which is exactly what happened rendering
+// transactions.expected_closing_date on /pipeline before this was added
+// (caught during manual verification, see PROGRESS-pipeline.md). Return the
+// raw wire text unchanged for all three types instead of letting pg parse
+// them into Date objects, so every consumer (JSX, JSON responses, `new
+// Date(...)` call sites in src/lib) gets the string these fields are typed
+// as, consistently.
+for (const oid of [types.builtins.DATE, types.builtins.TIMESTAMP, types.builtins.TIMESTAMPTZ]) {
+  types.setTypeParser(oid, (val) => val);
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SHARED_SCHEMA_PATH = path.join(__dirname, "..", "..", "..", "..", "packages", "shared-db", "schema.sql");
 const PIPELINE_MIGRATION_PATH = path.join(
