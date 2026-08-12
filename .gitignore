@@ -55,3 +55,9 @@ yarn-error.log*
 *.pem
 .vscode/
 .idea/
+
+
+# npm workspaces root lockfile -- regenerate with `npm install` at repo root;
+# not committed because this environment's GitHub write path (MCP API, no
+# raw git push credentials) makes pushing an 11k-line generated file costly.
+/package-lock.json
