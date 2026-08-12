@@ -185,6 +185,17 @@ production, same as every other module in this repo currently needs.
 - **This session did not have access to a live Supabase project, Supabase CLI, or a working Docker
   daemon** (confirmed: `docker pull` fails with "no such file or directory" on the docker socket) --
   see "What was NOT verified, and why" above for the precise scope of what that limited.
+- **Migration filename collision at integration time, added after this PROGRESS entry was otherwise
+  finalized**: this branch's new migration is `packages/shared-db/migrations/001_social_posts.sql`.
+  The `trackers` module branch (`claude/trackers`, built independently in a separate worktree with no
+  visibility into this branch) also created `packages/shared-db/migrations/001_trackers_goals.sql`.
+  The two don't conflict in content (`goals`/`goal_progress_entries` vs. `social_posts`/
+  `social_post_metrics` -- entirely different tables), but **both are numbered 001** and will collide
+  by filename once both branches are merged. Same class of issue as the separately-flagged `006_*`
+  collision between `claude/pipeline-listings` and `claude/inventory-developer` (see those PROGRESS
+  files) -- needs human resolution during the integration pass (Step 3): renumber sequentially in
+  whatever order the branches are actually merged, rather than guessing here since neither branch can
+  see the other's final state.
 
 ## Notes / decisions made
 - **Branched off `origin/claude/shared-schema`, not `master`.** The orchestration run book's literal
