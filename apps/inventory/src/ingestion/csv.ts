@@ -30,6 +30,7 @@ const HEADER_ALIASES: Record<string, keyof CsvRow> = {
   unit_ref: "unit_ref",
   unit_number: "unit_ref",
   unitno: "unit_ref",
+  unit_no: "unit_ref",
   type: "property_type",
   property_type: "property_type",
   unit_type: "property_type",
@@ -153,7 +154,14 @@ export function parseInventoryCsv(csvText: string, options: ParseInventoryCsvOpt
 
     const parsed = rowSchema.safeParse(mapped);
     if (!parsed.success) {
-      errors.push({ row: index + 2, message: parsed.error.issues.map((i) => i.message).join("; ") }); // +2: header row + 1-indexing
+      // Prefix each issue with its field path (zod's own message alone is
+      // often just "Required" for an absent column, which -- without the
+      // field name -- leaves a human staring at an ingestion error with no
+      // idea which column to fix).
+      const message = parsed.error.issues
+        .map((i) => (i.path.length > 0 ? `${i.path.join(".")}: ${i.message}` : i.message))
+        .join("; ");
+      errors.push({ row: index + 2, message }); // +2: header row + 1-indexing
       return;
     }
 
