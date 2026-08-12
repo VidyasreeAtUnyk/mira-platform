@@ -270,3 +270,108 @@ export interface DashboardStats {
   coldLeadsCount: number;
   todayFollowUps: Lead[];
 }
+
+// ============================================================
+// Goals / trackers (module 10 -- added post-Phase-0 by apps/trackers,
+// see packages/shared-db/migrations/001_trackers_goals.sql for the DDL and
+// PROGRESS-trackers.md "Notes / decisions made" for why this was promoted
+// to the shared package rather than kept apps/trackers-local: revenue and
+// activity targets are read by the Today view / monthly report (SPEC.md
+// modules 2 and 11), not trackers-only data.
+// ============================================================
+
+export const GOAL_SCOPES = ["individual", "team"] as const;
+export type GoalScope = (typeof GOAL_SCOPES)[number];
+
+export const GOAL_PERIOD_TYPES = ["daily", "weekly", "monthly", "quarterly", "custom"] as const;
+export type GoalPeriodType = (typeof GOAL_PERIOD_TYPES)[number];
+
+export const GOAL_STATUSES = ["active", "completed", "archived"] as const;
+export type GoalStatus = (typeof GOAL_STATUSES)[number];
+
+/**
+ * Recommended metric vocabulary, kept as free text (not a DB CHECK) for the
+ * same reason as RECOMMENDED_LEAD_SOURCES above -- the set of things a COO
+ * wants to track (revenue, lead volume, activity counts, ...) is expected to
+ * grow without needing a schema change every time.
+ */
+export const RECOMMENDED_GOAL_METRICS = [
+  "revenue_aed",
+  "deals_closed",
+  "leads_contacted",
+  "viewings_booked",
+  "calls_made",
+  "new_leads_added",
+  "proposals_sent",
+  "other",
+] as const;
+export type RecommendedGoalMetric = (typeof RECOMMENDED_GOAL_METRICS)[number];
+
+export interface Goal {
+  id: string;
+  scope: GoalScope;
+  /** Owning agent for an individual goal; null for a team-wide goal. */
+  agent_id: string | null;
+  /** Agent who created/assigned the goal -- may differ from agent_id (a manager setting a junior agent's target). */
+  created_by: string | null;
+  metric: string;
+  /** Free-text display unit, e.g. "AED", "calls", "viewings". Purely cosmetic. */
+  unit: string | null;
+  target_value: number;
+  period_type: GoalPeriodType;
+  period_start: string;
+  period_end: string;
+  status: GoalStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateGoalInput {
+  scope: GoalScope;
+  agent_id?: string;
+  metric: string;
+  unit?: string;
+  target_value: number;
+  period_type: GoalPeriodType;
+  period_start: string;
+  period_end: string;
+  notes?: string;
+}
+
+export interface UpdateGoalInput {
+  target_value?: number;
+  period_start?: string;
+  period_end?: string;
+  status?: GoalStatus;
+  notes?: string;
+}
+
+/** One day/session's worth of progress logged against a goal. Entries are additive, not cumulative -- sum them for total progress. */
+export interface GoalProgressEntry {
+  id: string;
+  goal_id: string;
+  entry_date: string;
+  value: number;
+  note: string | null;
+  logged_by: string | null;
+  created_at: string;
+}
+
+export interface CreateGoalProgressEntryInput {
+  goal_id: string;
+  entry_date: string;
+  value: number;
+  note?: string;
+}
+
+/** Computed, not stored -- returned by the progress view's aggregation query. */
+export interface GoalProgress {
+  goal: Goal;
+  totalLogged: number;
+  percentToGoal: number;
+  /** Consecutive most-recent days (including today) with at least one progress entry. */
+  currentStreakDays: number;
+  entryCount: number;
+  lastEntryDate: string | null;
+}
