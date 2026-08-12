@@ -243,6 +243,48 @@ export interface Goal {
     created_at: string;
     updated_at: string;
 }
+/**
+ * Draft-and-hold only, per CLAUDE.md/SPEC.md: nothing marks a post as
+ * actually "posted"/"published" because no live posting integration exists,
+ * and there shouldn't be one at this stage. Extending this enum with a real
+ * "posted" state is a deliberate, reviewed addition for whenever a live
+ * posting integration lands -- not something to guess at now.
+ */
+export declare const POST_STATUSES: readonly ["draft", "pending_approval", "approved", "held"];
+export type PostStatus = (typeof POST_STATUSES)[number];
+export declare const SOCIAL_PLATFORMS: readonly ["instagram", "facebook", "linkedin", "tiktok", "google_business"];
+export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number];
+export declare const POST_KINDS: readonly ["new_listing", "price_update", "sold", "market_update", "brand_general"];
+export type PostKind = (typeof POST_KINDS)[number];
+/**
+ * SPEC.md module 7: "some developers have strict marketing compliance
+ * rules" -- own-branded content is unrestricted (subject to the normal
+ * approval queue); co_branded content additionally names a developer
+ * partner and must be checked against that developer's brand-usage rules
+ * before approval (see apps/social-assistant's local DeveloperBrandProfile).
+ */
+export declare const BRAND_MODES: readonly ["own", "co_branded"];
+export type BrandMode = (typeof BRAND_MODES)[number];
+export interface SocialPost {
+    id: string;
+    kind: PostKind;
+    platform: SocialPlatform;
+    status: PostStatus;
+    brand_mode: BrandMode;
+    /** Required when brand_mode = 'co_branded'; null for 'own'. Free text -- see migration header for why this isn't an FK into an app-local table. */
+    developer_partner_name: string | null;
+    /** FK into shared `properties`, null for posts not tied to a listing (e.g. market_update, brand_general). */
+    property_id: string | null;
+    caption: string;
+    /** Whether `caption` came from the template generator ('template') or a future AI path ('ai'). */
+    caption_source: "template" | "ai";
+    scheduled_for: string | null;
+    /** SPEC.md RBAC role label at creation time -- free text pending real RBAC (see apps/social-assistant's ViewerRole). */
+    created_by_role: string;
+    notes: string | null;
+    created_at: string;
+    updated_at: string;
+}
 export interface CreateGoalInput {
     scope: GoalScope;
     agent_id?: string;
@@ -286,4 +328,32 @@ export interface GoalProgress {
     currentStreakDays: number;
     entryCount: number;
     lastEntryDate: string | null;
+}
+export interface CreateSocialPostInput {
+    kind: PostKind;
+    platform: SocialPlatform;
+    brand_mode: BrandMode;
+    developer_partner_name?: string;
+    property_id?: string;
+    caption?: string;
+    scheduled_for?: string;
+    created_by_role: string;
+    notes?: string;
+}
+export declare const SOCIAL_METRIC_TYPES: readonly ["impressions", "reach", "likes", "comments", "shares", "saves", "link_clicks"];
+export type SocialMetricType = (typeof SOCIAL_METRIC_TYPES)[number];
+/**
+ * Schema/structure only today -- no live posting integration exists, so
+ * nothing writes real rows yet. `source` distinguishes a genuine future
+ * ingestion ('platform_api') from anything else; never fabricated. See
+ * apps/social-assistant/src/lib/data/metrics.ts.
+ */
+export interface SocialPostMetric {
+    id: string;
+    post_id: string;
+    platform: SocialPlatform;
+    metric_type: SocialMetricType;
+    value: number;
+    source: "platform_api" | "manual_entry";
+    recorded_at: string;
 }

@@ -4,6 +4,47 @@ The canonical Phase 0 Postgres schema (`schema.sql`) for the merged
 CRM + lead-agent data model. Types for these tables live in
 `packages/shared-types`.
 
+## `migrations/` (post-Phase-0 additions)
+
+`schema.sql` is the frozen Phase 0 snapshot -- module branches building
+after Phase 0 don't edit it in place. When a module needs a genuinely
+cross-module table (read by more than its own app -- e.g. the Dashboard's
+Today view or the Monthly report), it adds a new, numbered, additive-only
+file under `migrations/` instead, with a header explaining why the table is
+shared rather than app-local. Apply `schema.sql` first, then `migrations/`
+files in numeric order:
+
+```
+psql mira_dev -f packages/shared-db/schema.sql
+psql mira_dev -f packages/shared-db/migrations/001_trackers_goals.sql
+psql mira_dev -f packages/shared-db/migrations/002_social_posts.sql
+```
+
+Current migrations:
+- `001_trackers_goals.sql` (apps/trackers, module 10): `goals` and
+  `goal_progress_entries` tables. Promoted to shared rather than kept
+  apps/trackers-local because revenue/activity targets are read by the
+  Today view (module 2) and monthly report (module 11) too -- see the
+  migration file's header and `PROGRESS-trackers.md` for the full reasoning.
+  Additive only; does not touch any Phase 0 table. Verified applying
+  cleanly to a scratch local Postgres 16 database (constraint checks
+  exercised, not just DDL).
+- `002_social_posts.sql` (apps/social-assistant, SPEC.md module 7):
+  `social_posts` (content calendar, draft-and-hold status) and
+  `social_post_metrics` (performance monitoring, structure only -- no live
+  posting integration exists yet). See that file's header for the full
+  promotion rationale and what deliberately stayed app-local instead.
+  <!-- Both this and 001_trackers_goals.sql were built in parallel module
+       branches without visibility into each other, so both originally
+       numbered themselves 001 -- renumbered during the integration pass
+       (claude/integration) so `migrations/` has a single, unambiguous
+       apply order. See PROGRESS-integration.md. -->
+
+Tables that stay app-local (not promoted here) keep their own migration
+under the owning app's directory -- e.g. `apps/lead-agent`'s `run_state`/
+`run_metrics`, or `apps/social-assistant/db/schema.sql`'s
+`listing_marketing_details` / `developer_brand_profiles` / `ai_call_log`.
+
 ## What applies this schema where
 
 - **apps/crm** (production data store): the real Supabase project. The
@@ -32,23 +73,3 @@ psql mira_dev -f packages/shared-db/schema.sql
 
 `apps/lead-agent`'s own db client does this automatically against whatever
 `DATABASE_URL` it's given (see `apps/lead-agent/src/db/client.ts`).
-
-## Post-Phase-0 migrations
-
-`schema.sql` is the frozen Phase 0 snapshot. Additions made by module
-branches after Phase 0 land in `migrations/`, one file per addition, applied
-in numeric order **after** `schema.sql`:
-
-```
-psql mira_dev -f packages/shared-db/schema.sql
-psql mira_dev -f packages/shared-db/migrations/001_trackers_goals.sql
-```
-
-- `001_trackers_goals.sql` (apps/trackers, module 10): `goals` and
-  `goal_progress_entries` tables. Promoted to shared rather than kept
-  apps/trackers-local because revenue/activity targets are read by the
-  Today view (module 2) and monthly report (module 11) too -- see the
-  migration file's header and `PROGRESS-trackers.md` for the full reasoning.
-  Additive only; does not touch any Phase 0 table. Verified applying
-  cleanly to a scratch local Postgres 16 database (constraint checks
-  exercised, not just DDL).

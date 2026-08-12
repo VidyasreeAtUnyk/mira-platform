@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/*
+ * Brand tokens mirrored from src/lib/brand/tokens.ts (BRAND_COLORS). CSS
+ * custom properties here are for UI chrome ONLY -- poster SVGs
+ * (src/lib/poster/svg-template.ts) read the TS constants directly and this
+ * file is not their source of truth. Kept in sync by hand since CSS can't
+ * import a TS module; if tokens.ts ever changes (e.g. founder confirms real
+ * hex values, see BRAND_COLOR_CONFIDENCE), update both.
+ */
+:root {
+  --brand-bg: #0b1b20;
+  --brand-bg-alt: #0d1f26;
+  --brand-gold: #c9a24c;
+  --brand-gold-light: #d8b36a;
+  --brand-body: #f2ece0;
+  --brand-hairline: color-mix(in srgb, var(--brand-gold) 35%, transparent);
+}
+
+@theme inline {
+  --color-brand-bg: var(--brand-bg);
+  --color-brand-bg-alt: var(--brand-bg-alt);
+  --color-brand-gold: var(--brand-gold);
+  --color-brand-gold-light: var(--brand-gold-light);
+  --color-brand-body: var(--brand-body);
+  --color-brand-hairline: var(--brand-hairline);
+}
+
+html {
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+}
+
+body {
+  background-color: var(--brand-bg);
+  color: var(--brand-body);
+}
+
+* {
+  border-color: var(--brand-hairline);
+}
