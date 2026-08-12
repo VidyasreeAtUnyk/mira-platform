@@ -6,7 +6,7 @@ import { canReactivateFrom } from "../domain/stateMachine.js";
 import { CONTACT_WINDOW_DAYS, MAX_SENDS_IN_WINDOW } from "../config/limits.js";
 
 const schema = z.object({
-  lead_id: z.number().int().positive(),
+  lead_id: z.string().uuid(),
 });
 
 /**
@@ -21,8 +21,8 @@ export const checkContactEligibility: ToolDefinition<z.infer<typeof schema>> = {
   description:
     "Advisory check for whether a lead looks contactable right now (not a hard guardrail -- propose_message/send_message enforce the real rules regardless of what this returns).",
   schema,
-  execute: (db, input) => {
-    const lead = getLead(db, input.lead_id);
+  execute: async (db, input) => {
+    const lead = await getLead(db, input.lead_id);
     if (!lead) throw new ToolError("NOT_FOUND", `No lead with id ${input.lead_id}.`);
 
     if (lead.do_not_contact) {
@@ -35,7 +35,7 @@ export const checkContactEligibility: ToolDefinition<z.infer<typeof schema>> = {
       };
     }
     const since = new Date(Date.now() - CONTACT_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    const sends = countSendsInWindow(db, input.lead_id, since);
+    const sends = await countSendsInWindow(db, input.lead_id, since);
     if (sends >= MAX_SENDS_IN_WINDOW) {
       return {
         eligible: false,

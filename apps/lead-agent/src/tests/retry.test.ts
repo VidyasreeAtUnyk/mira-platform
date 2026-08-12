@@ -1,14 +1,17 @@
+import { randomUUID } from "node:crypto";
 import type OpenAI from "openai";
 import type { Test } from "./testHelpers.js";
 import { assertTrue, createTestDb } from "./testHelpers.js";
 import { runAgentForLead } from "../agent/loop.js";
 import { listAudit } from "../db/queries.js";
+import type { Db } from "../db/types.js";
 
-function seedMinimalLead(db: ReturnType<typeof createTestDb>, id: number): void {
-  db.prepare(
-    `INSERT INTO leads (id, name, contact, source, segment, stage, do_not_contact, contact_count)
-     VALUES ($id, 'Test Lead', 'test@example.com', 'website_form', 'prospect', 'new', 0, 0)`
-  ).run({ $id: id } as never);
+async function seedMinimalLead(db: Db, id: string): Promise<void> {
+  await db.query(
+    `INSERT INTO leads (id, name, phone, source, segment, stage, do_not_contact, contact_count)
+     VALUES ($1, 'Test Lead', 'test@example.com', 'website_form', 'prospect', 'new', false, 0)`,
+    [id]
+  );
 }
 
 // createCompletionWithRetry always calls .create(params).withResponse(), matching
@@ -36,32 +39,35 @@ export const retryTests: Test[] = [
   {
     name: "runAgentForLead escalates gracefully (not a crash) when the LLM call fails after retries are exhausted",
     run: async () => {
-      const db = createTestDb();
-      seedMinimalLead(db, 1);
+      const db = await createTestDb();
+      const leadId = randomUUID();
+      await seedMinimalLead(db, leadId);
       const stubClient = makeThrowingClient(429, "simulated rate limit");
 
-      const result = await runAgentForLead(db, 1, stubClient, { maxRetries: 2, baseDelayMs: 5 });
+      const result = await runAgentForLead(db, leadId, stubClient, { maxRetries: 2, baseDelayMs: 5 });
 
       assertTrue(result.outcome.kind === "escalated", `expected escalated outcome, got ${result.outcome.kind}`);
 
-      const audit = listAudit(db, 1);
+      const audit = await listAudit(db, leadId);
       const escalateRow = audit.find((r) => r.tool_name === "escalate_to_agent");
       assertTrue(Boolean(escalateRow), "expected an escalate_to_agent audit_log entry");
+      const reason = (escalateRow!.input_json as { reason?: string }).reason ?? "";
       assertTrue(
-        escalateRow!.input_json.includes("LLM call failed after retries"),
-        `expected a clear reason logged, got: ${escalateRow!.input_json}`
+        reason.includes("LLM call failed after retries"),
+        `expected a clear reason logged, got: ${JSON.stringify(escalateRow!.input_json)}`
       );
     },
   },
   {
     name: "runAgentForLead does not retry a non-retryable error (e.g. 400) -- fails fast into escalation",
     run: async () => {
-      const db = createTestDb();
-      seedMinimalLead(db, 2);
+      const db = await createTestDb();
+      const leadId = randomUUID();
+      await seedMinimalLead(db, leadId);
       const stubClient = makeThrowingClient(400, "simulated bad request");
       const start = Date.now();
 
-      const result = await runAgentForLead(db, 2, stubClient, { maxRetries: 3, baseDelayMs: 1000 });
+      const result = await runAgentForLead(db, leadId, stubClient, { maxRetries: 3, baseDelayMs: 1000 });
       const elapsedMs = Date.now() - start;
 
       assertTrue(result.outcome.kind === "escalated", `expected escalated outcome, got ${result.outcome.kind}`);
@@ -71,14 +77,15 @@ export const retryTests: Test[] = [
   {
     name: "runAgentForLead fails fast (no retries) on a 429 whose retry-after is too long to be worth waiting for",
     run: async () => {
-      const db = createTestDb();
-      seedMinimalLead(db, 3);
+      const db = await createTestDb();
+      const leadId = randomUUID();
+      await seedMinimalLead(db, leadId);
       // Mirrors a real daily-quota 429: a huge retry-after (e.g. 1728s) means
       // no amount of in-process backoff will succeed -- retrying is pure waste.
       const stubClient = makeThrowingClient(429, "simulated daily quota exhausted", { "retry-after": "1728" });
       const start = Date.now();
 
-      const result = await runAgentForLead(db, 3, stubClient, { maxRetries: 5, baseDelayMs: 1000 });
+      const result = await runAgentForLead(db, leadId, stubClient, { maxRetries: 5, baseDelayMs: 1000 });
       const elapsedMs = Date.now() - start;
 
       assertTrue(result.outcome.kind === "escalated", `expected escalated outcome, got ${result.outcome.kind}`);
@@ -91,17 +98,19 @@ export const retryTests: Test[] = [
   {
     name: "runAgentForLead still retries a 429 with a short retry-after (worth waiting for)",
     run: async () => {
-      const db = createTestDb();
-      seedMinimalLead(db, 4);
+      const db = await createTestDb();
+      const leadId = randomUUID();
+      await seedMinimalLead(db, leadId);
       const stubClient = makeThrowingClient(429, "simulated brief rate limit", { "retry-after": "1" });
 
-      const result = await runAgentForLead(db, 4, stubClient, { maxRetries: 2, baseDelayMs: 10 });
+      const result = await runAgentForLead(db, leadId, stubClient, { maxRetries: 2, baseDelayMs: 10 });
 
       assertTrue(result.outcome.kind === "escalated", `expected escalated outcome, got ${result.outcome.kind}`);
-      const audit = listAudit(db, 4);
+      const audit = await listAudit(db, leadId);
       const escalateRow = audit.find((r) => r.tool_name === "escalate_to_agent");
+      const reason = (escalateRow?.input_json as { reason?: string } | undefined)?.reason ?? "";
       assertTrue(
-        Boolean(escalateRow) && escalateRow!.input_json.includes("LLM call failed after retries"),
+        Boolean(escalateRow) && reason.includes("LLM call failed after retries"),
         "expected it to still exhaust the (short) retry budget before escalating"
       );
     },
@@ -109,8 +118,9 @@ export const retryTests: Test[] = [
   {
     name: "runAgentForLead captures rate-limit headers from a successful response into RunResult.rateLimitInfo",
     run: async () => {
-      const db = createTestDb();
-      seedMinimalLead(db, 5);
+      const db = await createTestDb();
+      const leadId = randomUUID();
+      await seedMinimalLead(db, leadId);
       const headerValues: Record<string, string> = {
         "x-ratelimit-limit-requests": "50",
         "x-ratelimit-remaining-requests": "37",
@@ -134,7 +144,7 @@ export const retryTests: Test[] = [
                           {
                             id: "call_1",
                             type: "function",
-                            function: { name: "escalate_to_agent", arguments: JSON.stringify({ lead_id: 5, reason: "test" }) },
+                            function: { name: "escalate_to_agent", arguments: JSON.stringify({ lead_id: leadId, reason: "test" }) },
                           },
                         ],
                       },
@@ -149,7 +159,7 @@ export const retryTests: Test[] = [
         },
       } as unknown as OpenAI;
 
-      const result = await runAgentForLead(db, 5, stubClient);
+      const result = await runAgentForLead(db, leadId, stubClient);
 
       assertTrue(result.outcome.kind === "escalated", `expected escalated outcome, got ${result.outcome.kind}`);
       assertTrue(Boolean(result.rateLimitInfo), "expected rateLimitInfo to be captured");
@@ -179,8 +189,9 @@ export const retryTests: Test[] = [
       // remaining but tokens/min essentially exhausted. Reporting only the
       // requests dimension (as this system used to) would have looked
       // reassuring while the actual blocker -- TPM -- stayed invisible.
-      const db = createTestDb();
-      seedMinimalLead(db, 8);
+      const db = await createTestDb();
+      const leadId = randomUUID();
+      await seedMinimalLead(db, leadId);
       const stubClient = makeThrowingClient(429, "simulated TPM exhaustion with healthy RPD", {
         "retry-after": "1728",
         "x-ratelimit-limit-requests": "50",
@@ -189,7 +200,7 @@ export const retryTests: Test[] = [
         "x-ratelimit-remaining-tokens": "444",
       });
 
-      const result = await runAgentForLead(db, 8, stubClient, { maxRetries: 1, baseDelayMs: 1000 });
+      const result = await runAgentForLead(db, leadId, stubClient, { maxRetries: 1, baseDelayMs: 1000 });
 
       assertTrue(result.outcome.kind === "escalated", `expected escalated outcome, got ${result.outcome.kind}`);
       assertTrue(Boolean(result.rateLimitInfo), "expected rateLimitInfo to be captured");
@@ -206,8 +217,9 @@ export const retryTests: Test[] = [
   {
     name: "runAgentForLead captures rate-limit headers from a failed (429) response too",
     run: async () => {
-      const db = createTestDb();
-      seedMinimalLead(db, 6);
+      const db = await createTestDb();
+      const leadId = randomUUID();
+      await seedMinimalLead(db, leadId);
       const stubClient = makeThrowingClient(429, "simulated daily quota exhausted", {
         "retry-after": "1728",
         "x-ratelimit-limit-requests": "50",
@@ -215,7 +227,7 @@ export const retryTests: Test[] = [
         "x-ratelimit-reset-requests": "28m48s",
       });
 
-      const result = await runAgentForLead(db, 6, stubClient, { maxRetries: 1, baseDelayMs: 1000 });
+      const result = await runAgentForLead(db, leadId, stubClient, { maxRetries: 1, baseDelayMs: 1000 });
 
       assertTrue(result.outcome.kind === "escalated", `expected escalated outcome, got ${result.outcome.kind}`);
       assertTrue(Boolean(result.rateLimitInfo), "expected rateLimitInfo to be captured even from the failure path");

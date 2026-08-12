@@ -61,6 +61,12 @@ create table if not exists leads (
   preferred_areas text[],
   location_pref text,
   bedrooms text check (bedrooms in ('studio', '1', '2', '3', '4+')),
+  -- Freeform discovery-stage text ("house", "condo", "studio apartment"),
+  -- distinct from the structured `property_type` enum above -- see
+  -- apps/crm/supabase/migrations/005_lead_agent_property_interest.sql and
+  -- PROGRESS-phase0.md for why lead-agent's fixtures need this instead of
+  -- forcing them onto property_type.
+  property_interest text,
   timeline text,
   segment text not null default 'prospect' check (segment in ('prospect', 'client')),
   stage text not null default 'new' check (stage in (

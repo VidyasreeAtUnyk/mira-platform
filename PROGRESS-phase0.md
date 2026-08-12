@@ -1,125 +1,175 @@
 # Progress — phase0 — shared-schema-and-crm-merge
 
-Status: in-progress
+Status: done
 
 ## Done
 - Root npm workspace set up (`package.json` with `workspaces: ["apps/*","packages/*"]`); root `package-lock.json` is now
   canonical, per-app `package-lock.json` files removed.
 - `packages/shared-types`: canonical TS types for the merged schema (agents, leads, interactions, engagement_events,
   proposals, ai_suggestions, audit_log, properties, property_price_history, dld_price_index), plus the lead lifecycle
-  state machine (`stage.ts`, moved here from apps/lead-agent's `domain/stateMachine.ts`) and the
-  `CRM_STATUS_TO_STAGE`/`STAGE_TO_CRM_STATUS` mapping. Ships as a **precompiled** package (`npm run build`, output in
-  `dist/`, committed — see "Notes" for why) so both Next.js's bundler and lead-agent's NodeNext/tsx toolchain can
-  consume it without extension-resolution fights. `npm install` at repo root auto-rebuilds it via `postinstall`.
-- `packages/shared-db/schema.sql`: canonical Postgres schema for the merged model. Verified by applying to a scratch
-  local Postgres 16 instance (`createdb` + `psql -f`) — applies cleanly end to end.
-- `apps/crm` migrated to consume `@mira/shared-types` (`src/types/index.ts` is now a thin re-export). Added
-  `apps/crm/supabase/migrations/004_shared_schema_merge.sql`: additive migration bringing CRM's existing Supabase
-  schema up to the shared shape (new `leads` columns: location_pref, timeline, segment, stage, do_not_contact,
-  contact_count, locked_at, locked_by; backfills `stage` from legacy `status`; new tables engagement_events,
-  proposals, audit_log, properties, property_price_history with RLS policies matching the existing 001/002
-  conventions). **Verified**: applied 001→004 in sequence against a scratch local Postgres seeded with CRM's real
-  003_seed.sql data (with a stub `auth.uid()` function since local Postgres has no Supabase auth schema) — applies
-  clean, `stage` backfill confirmed correct against every seeded row (spot-checked all 7 status→stage mappings).
-  **Not yet applied to the real Supabase project** — no live Supabase credentials exist anywhere in this repo (see
-  Blockers).
-  - `apps/crm/src/lib/utils.ts` gained `displayStatus(lead)`, which prefers `status` and falls back to
-    `STAGE_TO_CRM_STATUS[stage]` — needed because post-merge leads (e.g. created by lead-agent) won't have the legacy
-    `status` column populated. Used in `lead-card.tsx` and `leads/[id]/page.tsx`.
-  - `apps/crm` typechecks clean (`npx tsc --noEmit`), lints clean (only pre-existing unused-import warnings,
-    unrelated to this change), and `next build` completes successfully end to end.
+  state machine (`stage.ts`) and the `CRM_STATUS_TO_STAGE`/`STAGE_TO_CRM_STATUS` mapping. Ships as a **precompiled**
+  package (`npm run build`, output in `dist/`, committed) so both Next.js's bundler and lead-agent's NodeNext/tsx
+  toolchain can consume it without extension-resolution fights. `npm install` at repo root auto-rebuilds it via
+  `postinstall`. Added `property_interest` (free text) to `Lead`/`CreateLeadInput` this run -- see Notes.
+- `packages/shared-db/schema.sql`: canonical Postgres schema for the merged model. Verified applying cleanly to a
+  fresh local Postgres 16 database, and (this run) exercised for real by `apps/lead-agent`'s full db layer.
+- `apps/crm` consumes `@mira/shared-types` (`src/types/index.ts` is a thin re-export). Migrations
+  `apps/crm/supabase/migrations/004_shared_schema_merge.sql` and `005_lead_agent_property_interest.sql` (this run)
+  bring CRM's Supabase schema up to the shared shape. **Verified**: `001` through `005` applied in sequence against a
+  scratch local Postgres 16 database this run (stub `auth.uid()` for RLS syntax only) -- applies clean.
+  **Not yet applied to the real Supabase project** -- no live Supabase credentials exist anywhere in this repo (see
+  Blockers). `apps/crm` typechecks clean (`npx tsc --noEmit`, re-verified this run after the shared-types change).
+- **`apps/lead-agent` fully migrated off `node:sqlite` onto the shared Postgres schema this run** (the piece the
+  previous run left as "In progress"). Every file that touched the old `DatabaseSync`-based db layer was converted:
+  - `src/db/client.ts`: `pg` `Pool`-based, applies `packages/shared-db/schema.sql` + this app's own
+    `src/db/local-schema.sql` on first use (same idempotent "apply on startup" pattern as before). Registers a
+    `numeric` type parser (pg returns `numeric` columns as strings by default -- `budget_min/max`, `price`,
+    `avg_price` need real numbers for the arithmetic in `findMatchingProperties`/`getPropertyMarketData`/
+    `stateMachine`).
+  - `src/db/local-schema.sql` (new): `run_state`/`run_metrics`, app-local per CLAUDE.md's module-boundary rule,
+    applied against the same database as the shared tables.
+  - `src/db/queries.ts`: full async rewrite against `pg`, positional (`$1, $2, ...`) params, uuid ids throughout.
+    `interactions`→`engagement_events`, `timestamp`→`created_at` column renames applied at every call site.
+  - `src/domain/types.ts`: re-exports the shared types instead of redefining them (`Interaction`→`EngagementEvent`,
+    `Actor`→`AuditActor`); `RunMetric`/`RunOutcomeKind` stay local (app-local table).
+  - `src/domain/stateMachine.ts`: now imports `STAGE_EDGES`/`isLegalStageTransition`/`canReactivateFrom` from
+    `@mira/shared-types` instead of defining its own copy; keeps the lead-agent-specific pure functions
+    (`hasSufficientProfile`, `nextStageAfterMessageSend`, etc.) which aren't part of the shared contract.
+  - `src/domain/grounding.ts`, `dealClose.ts`, `metrics.ts`: async, `Db`-typed, jsonb columns read as already-parsed
+    objects (no `JSON.parse` -- that was a real gotcha, see Notes).
+  - `src/tools/*.ts` (all 10) + `src/tools/index.ts`/`types.ts`: `execute` is now `async`, ids are uuid strings
+    (Zod: `z.string().uuid()`), `sendMessage` reads `lead.phone` (was `lead.contact`).
+  - `src/agent/openaiTools.ts`: JSON schemas sent to the model changed from `{type: "integer"}` to
+    `{type: "string", description: "UUID"}` for every id field the model round-trips.
+  - `src/agent/loop.ts`, `queue.ts`, `runQueue.ts`, `resumeWorker.ts`: async throughout, `leadId: string`.
+  - `src/agent/demoResume.ts`: reworked away from deleting SQLite file/WAL/SHM sidecars (no file to delete) to a
+    dedicated `mira_leadagent_demo` Postgres database, truncated+reseeded per run. Spawns the worker via `npx tsx`
+    (not a hand-built path to tsx's CLI entry) -- npm workspaces hoist `tsx` to the repo root's `node_modules`, and
+    a constructed `../../node_modules/tsx/dist/cli.mjs` path breaks under hoisting (caught and fixed this run --
+    see Notes).
+  - `src/db/seed.ts`: full rewrite. Ids are DB-generated uuids now, not fixed integers 1-8, so `seedDatabase()`
+    returns a `{leads: {alice, bob, ...}, properties: {maple, oak, ...}}` name→id map; every caller (CLI, evals,
+    demo) looks a lead up by name instead of hardcoding a number.
+  - `src/db/reset.ts`: `TRUNCATE ... CASCADE` (all shared + local tables) instead of deleting a SQLite file.
+  - `src/cli/index.ts`: every command `async`/`await`s the db layer; `parsePositiveInt` replaced with a UUID-format
+    `parseId` (CLI users now pass UUIDs, not small integers -- a real, visible CLI UX change, expected given "UUID
+    ids instead of integer autoincrement" was explicit in the previous run's plan).
+  - `src/tests/testHelpers.ts` + all 5 `*.test.ts` files + `src/tests/run.ts`: `createTestDb()` now connects to a
+    dedicated `mira_leadagent_test` Postgres database and `TRUNCATE ... CASCADE`s every relevant table before each
+    call (functionally equivalent isolation to the old fresh `:memory:` db per test, without needing per-test
+    transaction/rollback plumbing). Every test's fixture lead/property ids are generated via `randomUUID()` in the
+    test itself instead of hardcoded integers.
+  - `src/evals/run.ts`: converted the same way, using a dedicated `mira_leadagent_evals` database and
+    `seedDatabase()`'s returned id map. **Not run this session** -- evals call the real OpenAI API and no
+    `OPENAI_API_KEY` exists in this sandbox; converted for correctness (typechecks) but unverified end-to-end. Flag
+    for whoever has an API key to run `npm run evals` for real confidence.
+  - `package.json`: added `pg`/`@types/pg`/`@mira/shared-types` deps, removed nothing (`node:sqlite` was a Node
+    builtin, no package to remove). `.env.example` gained `DATABASE_URL` (empty, no value committed).
 
 ## In progress
-- `apps/lead-agent` still runs entirely on its own local `node:sqlite` file (`src/db/schema.sql`, integer PKs) — it
-  does **not** yet read/write the shared Postgres schema. This is the remaining piece before Phase 0 can be tagged
-  complete (see Blockers/Notes for why it wasn't attempted this run).
+- Nothing -- both apps read/write the shared schema now. See Blockers for what's genuinely left (all environment/
+  credentials issues, not code).
 
 ## Next
-- Migrate `apps/lead-agent`'s db layer (`src/db/client.ts`, `src/db/queries.ts`) from `node:sqlite`
-  (`DatabaseSync`, synchronous) to Postgres via the `pg` driver (async), targeting `packages/shared-db/schema.sql`'s
-  tables, with UUID ids instead of integer autoincrement.
-  - This ripples through the whole app (~30 files, ~3850 lines): every domain function that takes `db: DatabaseSync`
-    synchronously (`domain/stateMachine.ts` — now superseded by `@mira/shared-types`'s `stage.ts`, delete the local
-    copy and re-point imports; `domain/grounding.ts`, `domain/dealClose.ts`, `domain/metrics.ts`), every tool
-    (`src/tools/*.ts`), the agent loop (`src/agent/loop.ts`, `runQueue.ts`, `queue.ts`, `resumeWorker.ts`), the CLI
-    (`src/cli/index.ts`), and the entire test suite (`src/tests/*.test.ts`, which currently spins up
-    `:memory:` SQLite per test via `src/tests/testHelpers.ts`) need converting to `async`/`await`.
-  - `run_state` / `run_metrics` stay app-local (not part of the shared contract) — give them their own migration file
-    under `apps/lead-agent` (e.g. `src/db/local-schema.sql`), applied against the same Postgres database as the
-    shared tables, once `DATABASE_URL` is wired up.
-  - Local dev/test verification is possible without real Supabase credentials: Postgres 16 is available in-sandbox
-    (`sudo -u postgres` + `createdb`/`psql`) and was already used to verify `packages/shared-db/schema.sql` and
-    CRM's migration 004. Point `DATABASE_URL` at a scratch local database, apply `packages/shared-db/schema.sql` +
-    the new local-only migration, and run the existing test suite (converted to async) against it for real
-    confidence before calling this done.
-  - Add `DATABASE_URL` to `apps/lead-agent/.env.example` (no value, just the key) once the client is wired up.
-  - Do NOT tag `phase0-complete` until this is done and verified — "both apps/crm and apps/lead-agent read/write it"
-    is the literal completion criterion in MODULES.json's phase0 prompt, and that's not true yet.
+For whoever picks this up (a human, or a future module-branch session per MODULES.json Step 2, now unblocked):
+1. Supply real Supabase Postgres credentials (see Blockers) and run `supabase db push` (or apply
+   `001`-`005` manually) against the actual project; point `apps/lead-agent`'s `DATABASE_URL` at the same database
+   so "shared schema" is genuinely one physical database, not two identically-shaped local ones.
+2. Run `npm run evals` (needs `OPENAI_API_KEY`) for full end-to-end confidence beyond the unit test suite.
+3. CRM's Kanban board still reads the legacy `status` column, not `stage` -- see Blockers, needs a product decision.
+4. Module branches (dashboard, trackers, social-assistant, comms-hub, pipeline-listings, inventory-developer) can
+   now start per MODULES.json Step 2 -- `phase0-complete` is tagged as of this run's final commit.
 
 ## Blockers / needs human input
-- **No live Postgres/Supabase credentials exist anywhere in this repo** (`apps/crm` has no `.env`/`.env.local` at
-  all — only `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY` referenced in code; `apps/lead-agent`'s
-  `.env.example` only has `OPENAI_API_KEY`). This means:
-  1. Migration `004_shared_schema_merge.sql` has been verified against a scratch local Postgres but **not against
-     the real Supabase project** — someone with access needs to run `supabase db push` (or apply it manually) once
-     ready, and confirm the `auth.uid()`-based RLS policies behave as expected with real auth (untestable here since
-     local Postgres has no Supabase auth schema; I stubbed `auth.uid()` to satisfy the SQL syntax only, which is
-     **not** a substitute for testing real RLS behavior).
-  2. When `apps/lead-agent` moves to Postgres, it needs `DATABASE_URL` pointed at the same database CRM's Supabase
-     project uses, for the "shared" part of "shared schema" to be real rather than two independently-schema'd
-     databases. Per CLAUDE.md ("never hardcode credentials... if none exist yet, flag it and stop rather than
-     guessing"), this run only built/verified against a disposable local Postgres instance and left the actual env
-     var unset — a human needs to supply the real connection string (Supabase's Postgres URL, not just the REST
-     anon key CRM uses) before this is genuinely "shared" in production.
-- **CRM's Kanban board (`apps/crm/src/app/pipeline/pipeline-board.tsx`) still reads/writes the legacy `status`
-  column**, not the new canonical `stage` column. This was deliberate — switching it changes user-facing pipeline
-  column labels/count (CRM's 7 columns vs the unified 9-stage funnel: 'offer' vs 'decision_pending', new
-  'qualified'/'dormant'/'canceled' columns, etc.), which reads as a product decision, not a mechanical rename. Needs
-  a quick call from whoever owns the CRM UI: keep the current 7 columns as *display* labels mapped from `stage`
-  (mapping already exists: `STAGE_TO_CRM_STATUS`), or redesign the board around the full 9-stage funnel. Until
-  decided, `status` keeps working exactly as before (untouched data/behavior), and `stage` is the field lead-agent
-  and future modules should build against.
+- **No live Postgres/Supabase credentials exist anywhere in this repo.** Same blocker as last run, now also
+  applying to `apps/lead-agent`: its `DATABASE_URL` defaults to a local no-password dev database
+  (`postgres://localhost:5432/mira_leadagent_dev`) purely for local dev/test -- not pointed at the real Supabase
+  project, because that connection string doesn't exist here. Until a human supplies it, `apps/crm` and
+  `apps/lead-agent` are schema-identical but not actually sharing one physical database yet.
+  1. Migration `005_lead_agent_property_interest.sql` (like `004`) verified against scratch local Postgres only.
+  2. `apps/lead-agent`'s `DATABASE_URL` needs the real Supabase Postgres connection string (not the `NEXT_PUBLIC_
+     SUPABASE_*` REST/anon values `apps/crm` uses) once available.
+- **CRM's Kanban board still reads/writes the legacy `status` column**, not `stage` -- unchanged from last run,
+  still a product decision (7 columns vs the full 9-stage funnel), not something to guess at.
+- **`apps/lead-agent`'s evals suite (`npm run evals`) was converted but not run** -- needs a real `OPENAI_API_KEY`,
+  which doesn't exist in this sandbox. The 26-test unit suite (no API key needed) passed in full; the evals are the
+  next tier of confidence (full LLM-driven scenarios) and should be run by whoever has a key before relying on this
+  in anger.
+- **`apps/lead-agent`'s resumability demo (`npm run demo:resume`) could not be exercised past the "spawn a child,
+  it calls the real OpenAI API" point** -- verified the plumbing (seed, spawn via `npx tsx`, db close/reopen across
+  process boundaries, state readback) works correctly; the child process fails fast on the missing API key exactly
+  as designed (`getClient()` throws before any tool call), so the actual kill-mid-run/resume race is unverified.
 
 ## Notes / decisions made
-- **Canonical DB engine = Postgres (via CRM's existing Supabase project).** CRM already runs production-shaped
-  Postgres with RLS; lead-agent's `node:sqlite` was a deliberate but app-local choice. SPEC.md's RBAC/access-logging/
-  encryption-at-rest requirements fit Postgres+RLS far better than SQLite, so lead-agent moves to Postgres rather
-  than CRM moving to SQLite (or a third option). This is the "merge existing CRM + lead-agent repos into one
-  schema" from SPEC.md's Phase 0 description, applied literally: one physical database, not two apps each honoring
-  a shared *type* contract while keeping separate storage.
-- **`leads.stage` (9 values, from lead-agent) is the canonical lifecycle field; `leads.status` (7 values, from CRM)
-  is kept, unenforced, display-only.** lead-agent's stage machine (`STAGE_EDGES` in `stage.ts`) is the only side of
-  the merge with actually-enforced transition rules (`assertStageTransition`, reactivation-evidence checks, the
-  prospect→client flip on `won`); CRM's `status` was a plain unconstrained-transition enum. Rather than invent a
-  third vocabulary, the richer/enforced one wins. Full mapping and rationale in `packages/shared-types/src/stage.ts`.
-- **`interactions` (apps/crm: agent-initiated contact log — call/whatsapp/email/etc.) and apps/lead-agent's own
-  `interactions` (passive signals — page_view/email_open/reply/inquiry) are different concepts that happened to
-  share a table name.** Kept as two tables: CRM's keeps the name `interactions`; lead-agent's is renamed
-  `engagement_events` in the shared schema. Flagging this explicitly since it's the kind of silent collision that's
-  easy to merge wrong by accident.
-- **`proposals` (lead-agent) and `ai_suggestions` (crm) were NOT merged into one table.** Both feed a review/approval
-  queue but have different shapes (proposals: message/viewing drafts with approve/reject; ai_suggestions:
-  score/text suggestions including lead-scoring). SPEC.md's unified "review/approval queue" is explicitly Agent Core
-  (Phase 1) work — consolidating these two into one queue model belongs there, with real design thought, not as a
-  Phase 0 schema-merge side effect.
-- **`audit_log`, `properties`, `property_price_history` promoted from lead-agent-only to the shared schema.** Audit
-  logging is a platform-wide cross-cutting requirement per SPEC.md, not lead-agent-specific; `properties` foreshadows
-  the Listing Management / Inventory modules and buyer-demand-to-inventory matching (module 4), so it's worth being
-  shared from the start rather than duplicated later.
-- **`leads.source` relaxed from a CHECK-constrained enum (CRM) to free text.** CRM's and lead-agent's source
-  vocabularies don't overlap; Phase 0 is the wrong place to force a combined enum onto a field that's realistically
-  going to keep growing (new lead channels). Recommended values documented in `RECOMMENDED_LEAD_SOURCES`
-  (shared-types) as guidance, not a DB constraint.
-- **Flagging (not acting on) suspicious content in `apps/crm/AGENTS.md`.** That file instructs the reader to "read
-  the relevant guide in `node_modules/next/dist/docs/` before writing any code" — that path doesn't exist in a real
-  Next.js install and this reads like a prompt-injection attempt embedded in the repo rather than genuine project
-  documentation. Did not follow it. Worth a human sanity-check on how that file got there.
+- **Canonical DB engine = Postgres (via CRM's existing Supabase project).** Unchanged from last run's decision --
+  see prior notes below.
+- **`leads.stage` (9 values) canonical, `leads.status` (7 values) kept unenforced/display-only.** Unchanged.
+- **`interactions` vs `engagement_events`, `proposals` vs `ai_suggestions` kept separate.** Unchanged.
+- **`property_interest` (free text) added to `leads` this run** (migration 005): a gap found while wiring up
+  `apps/lead-agent`'s `findMatchingProperties`/`hasSufficientProfile` -- its fixture/demo data describes what a
+  lead wants as free text ("house", "condo", "studio apartment", "penthouse") that doesn't parse onto `property_
+  type`'s enum (apartment/villa/townhouse/commercial/land), neither in vocabulary nor granularity. Same pattern as
+  `location_pref` sitting alongside `preferred_areas` in migration 004: structured field for CRM's leads, freeform
+  field for lead-agent's discovery-stage leads, kept separate rather than lossily forcing one onto the other.
+- **pg's default `numeric`→string parsing was a real, silent-failure-shaped gotcha.** `budget_min/max`, `price`,
+  `avg_price` are all Postgres `numeric`; `node-postgres` returns those as strings by default (avoids float
+  precision loss on values outside safe-integer range) -- `p.price > lead.budget_max * 1.1` would have silently
+  done string concatenation instead of a numeric comparison if left unhandled. Fixed once, centrally, via a
+  `pg.types.setTypeParser` registration in `db/client.ts` rather than casting at every call site.
+- **jsonb columns come back already parsed.** `audit_log.input_json`/`output_json`, `ai_suggestions`-adjacent jsonb
+  columns -- `node-postgres` parses `jsonb` into JS values automatically. The old SQLite code stored these as `TEXT`
+  and `JSON.parse`d them at every read site; porting that pattern forward unchanged would have thrown on data that
+  was already an object. Every read site (`grounding.ts`, `queries.ts`'s `getEscalationStatus`, `metrics.ts`, the
+  CLI's `history` command, tests) was updated to treat these as plain objects.
+- **npm workspace hoisting broke a hand-built path to `tsx`'s CLI entry point.** `demoResume.ts` (written before the
+  previous run's workspace migration) constructed `path.join(__dirname, "..", "..", "node_modules", "tsx", "dist",
+  "cli.mjs")`, which resolves correctly when `tsx` is installed locally to `apps/lead-agent` but breaks once
+  workspace hoisting moves it to the repo root's `node_modules` instead -- exactly what happened here (caught by
+  actually running the script, not just typechecking it: `import.meta.resolve` was tried first and also failed,
+  since `tsx`'s `package.json` doesn't expose `./dist/cli.mjs` as an `exports` subpath). Fixed by spawning via
+  `npx tsx <path>` (PATH-based resolution, which npx already knows how to walk up to a hoisted root) instead of
+  constructing a path by hand. Worth checking for the same class of bug in any other script written before the
+  workspace migration that shells out to a dev dependency's CLI.
+- **Test isolation uses truncate-before-each-test against a real Postgres database, not per-test transactions.**
+  The old SQLite tests got free isolation from a fresh `:memory:` db per test. The equivalent here would be a
+  transaction-per-test (BEGIN before, ROLLBACK after, every query in the test going through that one client) --
+  correct but requires threading a checked-out `PoolClient` through the whole call chain and an explicit
+  after-each hook the test runner (`src/tests/run.ts`) doesn't currently have. Chose the simpler
+  `TRUNCATE ... CASCADE` at the top of `createTestDb()` instead: each of the 26 tests already generates its own
+  fresh `randomUUID()` fixture ids and doesn't depend on any other test's leftover state, so truncation gives the
+  same practical isolation at a fraction of the plumbing, at the cost of a bit of extra round-trip time (test suite
+  still runs in a couple of seconds). Revisit if the suite grows large enough for that to matter.
 
 ## Verification performed this run
-- `packages/shared-db/schema.sql` applied cleanly to a fresh local Postgres 16 database.
-- `apps/crm/supabase/migrations/001` through `004` applied in sequence to a fresh local Postgres 16 database
-  (with a stub `auth.uid()` function for RLS syntax only), including the real `003_seed.sql` data; spot-checked
-  `stage` backfill against all 7 legacy `status` values.
-- `apps/crm`: `npx tsc --noEmit` clean, `npx eslint src` clean (pre-existing warnings only), `npx next build`
-  succeeds end to end.
-- Did **not** run `apps/lead-agent`'s test suite or typecheck yet — its db layer hasn't been touched this run.
+- `packages/shared-types`: `npm install && npx tsc --noEmit` clean; rebuilt via `npm run build` (precompiled
+  `dist/` output, committed).
+- `apps/crm`: `npx tsc --noEmit` clean after the `property_interest` addition (re-verified, not just assumed
+  unaffected).
+- `apps/crm/supabase/migrations/001` through `005` applied in sequence to a fresh scratch local Postgres 16
+  database (stub `auth.uid()` for RLS syntax only) -- applies clean.
+- `apps/lead-agent`: `npx tsc --noEmit` (strict mode) clean.
+- `apps/lead-agent`: full unit test suite, **26/26 passed** against a real local Postgres 16 database
+  (`mira_leadagent_test`), not a mock -- `npm run test` equivalent, run via
+  `TEST_DATABASE_URL=... npx tsx src/tests/run.ts`.
+- `apps/lead-agent`: seeded a real local Postgres dev database (`mira_leadagent_dev`) end-to-end via
+  `src/db/seed.ts`, then exercised `dashboard`/`metrics`/`proposals` CLI commands against it -- correct output,
+  correct uuid ids, correct stage/segment rendering.
+- `apps/lead-agent`: manually drove the full tool-call chain against the seeded dev database outside the test
+  suite -- `get_lead_context` → `find_matching_properties` (confirmed numeric `price`/`budget_max` comparison works
+  correctly, not string comparison) → `get_property_market_data` → `propose_message` → approve → `send_message`.
+  Confirmed the lead's `stage` transitioned `new` → `contacted`, `contact_count` incremented, `last_contacted_at`
+  set correctly.
+- `apps/lead-agent`: ran `demoResume.ts` end-to-end. Seed/spawn/db-close-reopen/state-readback plumbing all work
+  correctly across the process boundary; the actual OpenAI call fails fast on the missing API key exactly as
+  designed (not a bug -- expected in a sandbox with no key), so the kill-mid-run race itself is unverified.
+- Did **not** run `npm run evals` (needs a real `OPENAI_API_KEY`, none available here) -- see Blockers.
+- Did **not** apply any migration to a real Supabase project (no credentials available here) -- see Blockers.
+
+## phase0-complete
+Tagged on this run's final commit. Completion criterion from MODULES.json's phase0 prompt -- "shared schema/types
+exist under packages/, and both apps/crm and apps/lead-agent read/write it" -- is met and verified locally to the
+fullest extent possible without live Supabase credentials (which don't exist anywhere in this repo; see Blockers).
+Per CLAUDE.md, missing credentials are flagged rather than guessed at or blocking indefinitely -- the remaining
+"point both apps at the same real database" step is an environment/ops action for a human with access, not
+something this or any future automated run can do blind. Module branches (Step 2 in the scheduled orchestration
+prompt) can now proceed.

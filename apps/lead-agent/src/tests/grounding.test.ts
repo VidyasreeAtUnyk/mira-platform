@@ -1,7 +1,17 @@
+import { randomUUID } from "node:crypto";
 import type { Test } from "./testHelpers.js";
 import { assertEqual, assertTrue, createTestDb } from "./testHelpers.js";
 import { parseMoneyToken, parsePercentToken, checkNumericGrounding } from "../domain/grounding.js";
 import { insertAudit } from "../db/queries.js";
+import type { Db } from "../db/types.js";
+
+async function seedMinimalLead(db: Db, id: string): Promise<void> {
+  await db.query(
+    `INSERT INTO leads (id, name, phone, source, segment, stage, do_not_contact, contact_count)
+     VALUES ($1, 'Test Lead', 'test@example.com', 'website_form', 'prospect', 'new', false, 0)`,
+    [id]
+  );
+}
 
 export const groundingTests: Test[] = [
   {
@@ -34,20 +44,17 @@ export const groundingTests: Test[] = [
   },
   {
     name: "checkNumericGrounding: regression -- '$500k' no longer false-positives against a grounded projection",
-    run: () => {
-      const db = createTestDb();
-      const leadId = 1;
-      db.prepare(
-        `INSERT INTO leads (id, name, contact, source, segment, stage, do_not_contact, contact_count)
-         VALUES (1, 'Test Lead', 'test@example.com', 'website_form', 'prospect', 'new', 0, 0)`
-      ).run();
+    run: async () => {
+      const db = await createTestDb();
+      const leadId = randomUUID();
+      await seedMinimalLead(db, leadId);
       // Mirrors the live bug: property market data where 500000 doesn't appear
       // verbatim, but the projected next-year price (497333) is within the
       // guardrail's existing tolerance of a $500k restated budget.
-      insertAudit(db, {
+      await insertAudit(db, {
         lead_id: leadId,
         tool_name: "get_property_market_data",
-        input_json: { property_id: 1 },
+        input_json: { property_id: randomUUID() },
         output_json: {
           property: { price: 480000 },
           price_history: [
@@ -65,7 +72,7 @@ export const groundingTests: Test[] = [
       // must not throw once shorthand parsing is fixed.
       let threw = false;
       try {
-        checkNumericGrounding(db, leadId, "Hi Alice — thanks for your inquiry about houses under $500k in Suburbia.");
+        await checkNumericGrounding(db, leadId, "Hi Alice — thanks for your inquiry about houses under $500k in Suburbia.");
       } catch {
         threw = true;
       }
@@ -74,17 +81,14 @@ export const groundingTests: Test[] = [
   },
   {
     name: "checkNumericGrounding: still rejects a genuinely fabricated figure",
-    run: () => {
-      const db = createTestDb();
-      const leadId = 1;
-      db.prepare(
-        `INSERT INTO leads (id, name, contact, source, segment, stage, do_not_contact, contact_count)
-         VALUES (1, 'Test Lead', 'test@example.com', 'website_form', 'prospect', 'new', 0, 0)`
-      ).run();
-      insertAudit(db, {
+    run: async () => {
+      const db = await createTestDb();
+      const leadId = randomUUID();
+      await seedMinimalLead(db, leadId);
+      await insertAudit(db, {
         lead_id: leadId,
         tool_name: "get_property_market_data",
-        input_json: { property_id: 1 },
+        input_json: { property_id: randomUUID() },
         output_json: {
           property: { price: 480000 },
           price_history: [{ avg_price: 430000 }],
@@ -95,7 +99,7 @@ export const groundingTests: Test[] = [
 
       let threw = false;
       try {
-        checkNumericGrounding(db, leadId, "This property is a steal at $2M, up 40% this year!");
+        await checkNumericGrounding(db, leadId, "This property is a steal at $2M, up 40% this year!");
       } catch {
         threw = true;
       }

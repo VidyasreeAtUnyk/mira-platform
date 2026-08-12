@@ -74,6 +74,6 @@ Your job each run:
 Do not fabricate tool results. Do not ask the user questions -- there is no user in this loop, only tools.`;
 }
 
-export function buildUserTurn(leadId: number): string {
+export function buildUserTurn(leadId: string): string {
   return `Process lead id ${leadId} now. Start by calling get_lead_context.`;
 }

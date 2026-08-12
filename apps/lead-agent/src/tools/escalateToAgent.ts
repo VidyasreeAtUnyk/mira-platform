@@ -4,7 +4,7 @@ import { getLead } from "../db/queries.js";
 import { ToolError } from "../domain/errors.js";
 
 const schema = z.object({
-  lead_id: z.number().int().positive(),
+  lead_id: z.string().uuid(),
   reason: z.string().min(1),
   // Internal-only flag, never part of the JSON schema exposed to the model
   // (see agent/openaiTools.ts) -- set exclusively by the agent loop's own
@@ -19,8 +19,8 @@ export const escalateToAgent: ToolDefinition<z.infer<typeof schema>> = {
   description:
     "Terminal action for this run: hand the lead to a human agent with a reason (e.g. contradictory signals, do_not_contact, anything you shouldn't decide autonomously). No further tool calls should be made for this lead this run.",
   schema,
-  execute: (db, input) => {
-    const lead = getLead(db, input.lead_id);
+  execute: async (db, input) => {
+    const lead = await getLead(db, input.lead_id);
     if (!lead) throw new ToolError("NOT_FOUND", `No lead with id ${input.lead_id}.`);
     return {
       ok: true as const,

@@ -1,23 +1,33 @@
 # Lead Follow-Up Agent
 
 An autonomous real estate lead follow-up agent with a human approval step in the loop.
-TypeScript, OpenAI function calling, SQLite (`node:sqlite`), Zod, plain CLI. No web UI.
+TypeScript, OpenAI function calling, Postgres (via the shared schema in `packages/shared-db`,
+`pg` driver), Zod, plain CLI. No web UI.
 
-Full design rationale, bugs found, and decision trail: [docs/prompts.md](docs/prompts.md).
+Full design rationale, bugs found, and decision trail: [docs/prompts.md](docs/prompts.md). Phase 0
+merge notes (why Postgres, why uuid ids, table renames from the pre-merge SQLite version): see the
+repo root's `PROGRESS-phase0.md`.
 
 ## Quick start
 
+Requires a Postgres 16+ instance reachable via `DATABASE_URL` (defaults to a local, no-password
+`postgres://localhost:5432/mira_leadagent_dev` if unset -- see `packages/shared-db/README.md`).
+
 ```bash
 npm install
-cp .env.example .env        # then fill in OPENAI_API_KEY (and optionally OPENAI_MODEL)
-npm run seed                # (re)creates data/leads.sqlite with fixtures
-npm run cli -- dashboard    # see all leads
-npm run cli -- process 1    # run the agent loop on lead 1
+cp .env.example .env        # then fill in OPENAI_API_KEY (and optionally OPENAI_MODEL/DATABASE_URL)
+npm run seed                # wipes + reseeds the Postgres db with fixtures, prints each lead's uuid
+npm run cli -- dashboard    # see all leads (with their uuid ids)
+npm run cli -- process <leadUuid>   # run the agent loop on one lead (id from `dashboard`)
 npm run cli -- proposals    # see proposals awaiting approval
-npm run cli -- approve 1    # approve one
-npm run cli -- process 1    # agent sees the approval and calls send_message
-npm run cli -- history 1    # full audit trail for lead 1
+npm run cli -- approve <proposalUuid>
+npm run cli -- process <leadUuid>   # agent sees the approval and calls send_message
+npm run cli -- history <leadUuid>   # full audit trail for a lead
 ```
+
+Ids are Postgres `uuid`s throughout (leads, proposals, properties, evidence interactions) --
+not the small sequential integers of the pre-Phase-0-merge version. Get real ids from
+`cli dashboard`/`cli proposals`, not by guessing.
 
 `npm run cli -- process` (no id) drains the whole queue, showing a live spinner per lead and the
 real remaining-quota count (requests/day *and* tokens/minute) after each one. `--limit <n>` caps
@@ -27,18 +37,20 @@ actions (see [Human-in-the-loop](#human-in-the-loop)). `cli escalated` lists eve
 distinguishing a genuine park (`needs retry`) from a self-healing rate-limit hit.
 
 ```bash
-npm run reset-db          # wipes data/leads.sqlite
-npm run evals              # runs the 7 scripted scenarios against a throwaway db
+npm run reset-db          # truncates every shared+local table this app touches (schema untouched)
+npm run evals              # runs the 7 scripted scenarios against a dedicated Postgres db (mira_leadagent_evals)
 npm run evals -- --quick   # 4/7, for cheaper local iteration -- run the full suite before submitting
-npm run test               # 26 deterministic unit tests, no API key needed
-npm run demo:resume        # kills the agent mid-run and shows it resumes correctly
+npm run test               # 26 deterministic unit tests, no API key needed, against mira_leadagent_test
+npm run demo:resume        # kills the agent mid-run and shows it resumes correctly, against mira_leadagent_demo
 npm run cli -- metrics     # aggregate run stats
 npm run typecheck
 ```
 
 Requires `OPENAI_API_KEY` in `.env`. Default model `gpt-5.4-mini`, override with `OPENAI_MODEL`.
-Uses `node:sqlite` (Node ≥22.5, experimental but stable for this use) instead of `better-sqlite3`
-for zero native dependencies.
+Each of the commands above that needs its own Postgres database (`dev`/`test`/`evals`/`demo`)
+falls back to a local same-machine, no-password database of that name if the corresponding env var
+(`DATABASE_URL`/`TEST_DATABASE_URL`/`EVAL_DATABASE_URL`/`DEMO_DATABASE_URL`) isn't set -- create
+them once locally (`createdb mira_leadagent_dev`, etc.) before first use.
 
 ---
 
@@ -102,8 +114,9 @@ a judgment call; the *next* `cli process` just picks it up again.
 
 ## Resumability
 
-All state lives in SQLite, written synchronously as each tool call happens — nothing is held only
-in memory. Killing the process mid-run and restarting resumes exactly where it left off, because
+All state lives in Postgres (the shared schema, `packages/shared-db`), committed as each tool call
+happens — nothing is held only in memory. Killing the process mid-run and restarting resumes
+exactly where it left off, because
 `get_lead_context` on the next run simply reflects whatever already committed. `npm run demo:resume`
 proves this directly: spawns the agent as a child process, `SIGKILL`s it mid-run, then starts a
 brand-new process (no shared memory) that continues from committed state to a real stopping point.
@@ -127,9 +140,12 @@ Built and tested against a genuinely constrained API quota, which forced real en
 
 ## Testing
 
-**26 unit tests** (`npm test`, no API key): grounding parsing, retry/backoff, locking races,
-escalation classification, quota capture, limit-capping. **7 scripted eval scenarios**
-(`npm run evals`) against a real model, asserting final DB state — last full run: 7/7 passed live.
+**26 unit tests** (`npm test`, no API key, against a real local Postgres): grounding parsing,
+retry/backoff, locking races, escalation classification, quota capture, limit-capping. **7 scripted
+eval scenarios** (`npm run evals`) against a real model, asserting final DB state -- last verified
+end-to-end pre-Phase-0-merge (against SQLite); post-merge the unit suite has been re-verified
+(26/26 against Postgres) but the evals need re-running by whoever next has an `OPENAI_API_KEY` (see
+`PROGRESS-phase0.md`).
 
 ## Provider-agnostic proof
 
@@ -160,5 +176,5 @@ In priority order, what stands between this and touching real leads:
 5. The CLI stands in for a real inbox/CRM-integrated approval interface, not a UI to build out.
 
 At 100× volume: a real job queue (not one linear DB scan with a lock column), batched context
-fetches, a rate limiter shared across workers, and Postgres in place of SQLite for concurrent
-writers — none of which requires changing the guardrail logic itself.
+fetches, and a rate limiter shared across workers — none of which requires changing the guardrail
+logic itself. (Postgres for concurrent writers, formerly listed here, landed in the Phase 0 merge.)

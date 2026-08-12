@@ -1,6 +1,8 @@
 import type OpenAI from "openai";
 import { TOOLS } from "../tools/index.js";
 
+const UUID_ID = { type: "string" as const, description: "UUID" };
+
 /**
  * OpenAI function-calling tool definitions, one per domain tool. Written by
  * hand (rather than derived from the Zod schemas) so the JSON Schema sent to
@@ -11,32 +13,32 @@ import { TOOLS } from "../tools/index.js";
 const PARAMETERS: Record<string, OpenAI.FunctionParameters> = {
   get_lead_context: {
     type: "object",
-    properties: { lead_id: { type: "integer" } },
+    properties: { lead_id: UUID_ID },
     required: ["lead_id"],
     additionalProperties: false,
   },
   check_contact_eligibility: {
     type: "object",
-    properties: { lead_id: { type: "integer" } },
+    properties: { lead_id: UUID_ID },
     required: ["lead_id"],
     additionalProperties: false,
   },
   find_matching_properties: {
     type: "object",
-    properties: { lead_id: { type: "integer" } },
+    properties: { lead_id: UUID_ID },
     required: ["lead_id"],
     additionalProperties: false,
   },
   get_property_market_data: {
     type: "object",
-    properties: { property_id: { type: "integer" } },
+    properties: { property_id: UUID_ID },
     required: ["property_id"],
     additionalProperties: false,
   },
   propose_message: {
     type: "object",
     properties: {
-      lead_id: { type: "integer" },
+      lead_id: UUID_ID,
       draft: { type: "string", description: "The full drafted outreach message text." },
     },
     required: ["lead_id", "draft"],
@@ -45,7 +47,7 @@ const PARAMETERS: Record<string, OpenAI.FunctionParameters> = {
   propose_viewing: {
     type: "object",
     properties: {
-      lead_id: { type: "integer" },
+      lead_id: UUID_ID,
       proposed_time: { type: "string", description: "Human-readable proposed viewing date/time." },
     },
     required: ["lead_id", "proposed_time"],
@@ -53,15 +55,15 @@ const PARAMETERS: Record<string, OpenAI.FunctionParameters> = {
   },
   send_message: {
     type: "object",
-    properties: { proposal_id: { type: "integer" } },
+    properties: { proposal_id: UUID_ID },
     required: ["proposal_id"],
     additionalProperties: false,
   },
   reactivate_lead: {
     type: "object",
     properties: {
-      lead_id: { type: "integer" },
-      evidence_interaction_id: { type: "integer" },
+      lead_id: UUID_ID,
+      evidence_interaction_id: UUID_ID,
     },
     required: ["lead_id", "evidence_interaction_id"],
     additionalProperties: false,
@@ -69,7 +71,7 @@ const PARAMETERS: Record<string, OpenAI.FunctionParameters> = {
   escalate_to_agent: {
     type: "object",
     properties: {
-      lead_id: { type: "integer" },
+      lead_id: UUID_ID,
       reason: { type: "string" },
     },
     required: ["lead_id", "reason"],
@@ -78,7 +80,7 @@ const PARAMETERS: Record<string, OpenAI.FunctionParameters> = {
   log_note: {
     type: "object",
     properties: {
-      lead_id: { type: "integer" },
+      lead_id: UUID_ID,
       note: { type: "string" },
     },
     required: ["lead_id", "note"],

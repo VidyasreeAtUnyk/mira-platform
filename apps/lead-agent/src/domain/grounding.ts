@@ -1,4 +1,4 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { Db } from "../db/types.js";
 import { ToolError } from "./errors.js";
 
 interface MarketDataOutput {
@@ -50,18 +50,18 @@ function approxEquals(a: number, b: number, tolerance: number): boolean {
  * get_property_market_data call logged for this lead in this run. Prevents
  * the model from narrating a price/trend it made up.
  */
-export function checkNumericGrounding(db: DatabaseSync, leadId: number, draft: string): void {
+export async function checkNumericGrounding(db: Db, leadId: string, draft: string): Promise<void> {
   const dollars = extractDollarFigures(draft);
   const percents = extractPercentFigures(draft);
   if (dollars.length === 0 && percents.length === 0) return;
 
-  const row = db
-    .prepare(
-      `SELECT output_json FROM audit_log
-       WHERE lead_id = $lead_id AND tool_name = 'get_property_market_data'
-       ORDER BY timestamp DESC, id DESC LIMIT 1`
-    )
-    .get({ $lead_id: leadId }) as { output_json: string } | undefined;
+  const result = await db.query<{ output_json: MarketDataOutput }>(
+    `SELECT output_json FROM audit_log
+     WHERE lead_id = $1 AND tool_name = 'get_property_market_data'
+     ORDER BY created_at DESC, id DESC LIMIT 1`,
+    [leadId]
+  );
+  const row = result.rows[0];
 
   if (!row) {
     throw new ToolError(
@@ -70,7 +70,8 @@ export function checkNumericGrounding(db: DatabaseSync, leadId: number, draft: s
     );
   }
 
-  const data = JSON.parse(row.output_json) as MarketDataOutput;
+  // pg returns jsonb columns already parsed into JS values -- no JSON.parse needed.
+  const data = row.output_json;
   const allowedDollars = [
     data.property?.price,
     ...(data.price_history ?? []).map((h) => h.avg_price),

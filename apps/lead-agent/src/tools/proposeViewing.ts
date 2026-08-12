@@ -4,7 +4,7 @@ import { getLead, insertProposal } from "../db/queries.js";
 import { ToolError } from "../domain/errors.js";
 
 const schema = z.object({
-  lead_id: z.number().int().positive(),
+  lead_id: z.string().uuid(),
   proposed_time: z.string().min(1),
 });
 
@@ -13,8 +13,8 @@ export const proposeViewing: ToolDefinition<z.infer<typeof schema>> = {
   description:
     "Propose a property viewing for human approval. Only valid when the lead's stage is 'qualified'.",
   schema,
-  execute: (db, input) => {
-    const lead = getLead(db, input.lead_id);
+  execute: async (db, input) => {
+    const lead = await getLead(db, input.lead_id);
     if (!lead) throw new ToolError("NOT_FOUND", `No lead with id ${input.lead_id}.`);
 
     if (lead.do_not_contact) {

@@ -1,104 +1,55 @@
-export const SEGMENTS = ["prospect", "client"] as const;
-export type Segment = (typeof SEGMENTS)[number];
+/**
+ * Re-exports the canonical shared types (see CLAUDE.md: don't redefine types
+ * that already exist in packages/shared-*) under the names this app's code
+ * already uses, plus the handful of types that stay app-local (run_metrics
+ * is this app's own operational table, not part of the shared contract).
+ *
+ * Renames from the pre-merge local types, since the shared schema settled
+ * different names during the Phase 0 merge (see PROGRESS-phase0.md):
+ *   - `Interaction` (this app's passive page_view/email_open/reply/inquiry
+ *     signals) -> `EngagementEvent`. apps/crm's `Interaction` is now a
+ *     different, human-contact-log concept -- importing the old name here
+ *     would silently collide with it.
+ *   - `Actor` -> `AuditActor` (same two values: 'agent' | 'human').
+ */
+export type {
+  Stage,
+  Segment,
+  Lead,
+  EngagementEvent,
+  EngagementEventType,
+  Proposal,
+  ProposalType,
+  ProposalStatus,
+  AuditLogRow,
+  AuditActor,
+  Property,
+  PropertyPriceHistory,
+  PropertyTier,
+} from "@mira/shared-types";
 
-export const STAGES = [
-  "new",
-  "contacted",
-  "qualified",
-  "viewing_scheduled",
-  "decision_pending",
-  "won",
-  "lost",
-  "canceled",
-  "dormant",
-] as const;
-export type Stage = (typeof STAGES)[number];
+export {
+  STAGES,
+  SEGMENTS,
+  STAGE_EDGES,
+  REACTIVATABLE_STAGES,
+  ENGAGEMENT_EVENT_TYPES,
+  PROPOSAL_TYPES,
+  PROPOSAL_STATUSES,
+  AUDIT_ACTORS,
+  PROPERTY_TIERS,
+} from "@mira/shared-types";
 
-export const INTERACTION_TYPES = ["page_view", "email_open", "reply", "inquiry"] as const;
-export type InteractionType = (typeof INTERACTION_TYPES)[number];
-
-export const PROPOSAL_TYPES = ["message", "viewing"] as const;
-export type ProposalType = (typeof PROPOSAL_TYPES)[number];
-
-export const PROPOSAL_STATUSES = ["pending", "approved", "rejected"] as const;
-export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
-
-export const PROPERTY_TIERS = ["standard", "upgrade"] as const;
-export type PropertyTier = (typeof PROPERTY_TIERS)[number];
-
-export const ACTORS = ["agent", "human"] as const;
-export type Actor = (typeof ACTORS)[number];
-
-export interface Lead {
-  id: number;
-  name: string;
-  contact: string;
-  property_interest: string | null;
-  budget: number | null;
-  location_pref: string | null;
-  timeline: string | null;
-  source: string;
-  segment: Segment;
-  stage: Stage;
-  do_not_contact: 0 | 1;
-  last_contacted_at: string | null;
-  contact_count: number;
-  locked_at: string | null;
-  locked_by: string | null;
-}
-
-export interface Interaction {
-  id: number;
-  lead_id: number;
-  type: InteractionType;
-  timestamp: string;
-  detail: string | null;
-}
-
-export interface Proposal {
-  id: number;
-  lead_id: number;
-  type: ProposalType;
-  content: string;
-  status: ProposalStatus;
-  rejection_reason: string | null;
-  proposed_time: string | null;
-  created_at: string;
-}
-
-export interface AuditLogRow {
-  id: number;
-  lead_id: number | null;
-  tool_name: string;
-  input_json: string;
-  output_json: string;
-  timestamp: string;
-  actor: Actor;
-}
-
-export interface Property {
-  id: number;
-  address: string;
-  area: string;
-  type: string;
-  price: number;
-  bedrooms: number;
-  tier: PropertyTier;
-}
-
-export interface PropertyPriceHistory {
-  id: number;
-  property_id: number;
-  year: number;
-  avg_price: number;
-}
+// ============================================================
+// App-local: run_metrics (see src/db/local-schema.sql)
+// ============================================================
 
 export const RUN_OUTCOMES = ["escalated", "proposal_created", "sent", "no_action"] as const;
 export type RunOutcomeKind = (typeof RUN_OUTCOMES)[number];
 
 export interface RunMetric {
-  id: number;
-  lead_id: number;
+  id: string;
+  lead_id: string;
   started_at: string;
   ended_at: string;
   outcome: RunOutcomeKind;

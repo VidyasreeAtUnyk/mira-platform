@@ -1,13 +1,16 @@
+import { randomUUID } from "node:crypto";
 import type OpenAI from "openai";
 import type { Test } from "./testHelpers.js";
 import { assertTrue, createTestDb } from "./testHelpers.js";
 import { runAgentForLead, type RunProgress } from "../agent/loop.js";
+import type { Db } from "../db/types.js";
 
-function seedMinimalLead(db: ReturnType<typeof createTestDb>, id: number): void {
-  db.prepare(
-    `INSERT INTO leads (id, name, contact, source, segment, stage, do_not_contact, contact_count)
-     VALUES ($id, 'Test Lead', 'test@example.com', 'website_form', 'prospect', 'new', 0, 0)`
-  ).run({ $id: id } as never);
+async function seedMinimalLead(db: Db, id: string): Promise<void> {
+  await db.query(
+    `INSERT INTO leads (id, name, phone, source, segment, stage, do_not_contact, contact_count)
+     VALUES ($1, 'Test Lead', 'test@example.com', 'website_form', 'prospect', 'new', false, 0)`,
+    [id]
+  );
 }
 
 interface ScriptedTurn {
@@ -60,16 +63,17 @@ export const progressTests: Test[] = [
   {
     name: "runAgentForLead reports thinking + tool_call progress events with accumulating token counts",
     run: async () => {
-      const db = createTestDb();
-      seedMinimalLead(db, 1);
+      const db = await createTestDb();
+      const leadId = randomUUID();
+      await seedMinimalLead(db, leadId);
 
       const stubClient = makeScriptedClient([
-        { toolCalls: [{ name: "log_note", args: { lead_id: 1, note: "reviewing lead" } }] },
-        { toolCalls: [{ name: "escalate_to_agent", args: { lead_id: 1, reason: "test scenario" } }] },
+        { toolCalls: [{ name: "log_note", args: { lead_id: leadId, note: "reviewing lead" } }] },
+        { toolCalls: [{ name: "escalate_to_agent", args: { lead_id: leadId, reason: "test scenario" } }] },
       ]);
 
       const events: RunProgress[] = [];
-      const result = await runAgentForLead(db, 1, stubClient, undefined, (p) => events.push(p));
+      const result = await runAgentForLead(db, leadId, stubClient, undefined, (p) => events.push(p));
 
       assertTrue(result.outcome.kind === "escalated", `expected escalated outcome, got ${result.outcome.kind}`);
 

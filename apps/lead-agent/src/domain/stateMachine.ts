@@ -1,39 +1,13 @@
+import { STAGE_EDGES, isLegalStageTransition, canReactivateFrom } from "@mira/shared-types";
 import type { Lead, Stage } from "./types.js";
 import { ToolError } from "./errors.js";
 import { MAX_UNANSWERED_ATTEMPTS } from "../config/limits.js";
 
-/**
- * The funnel graph from the brief. This is the single source of truth for
- * which stage transitions are legal -- tools consult this instead of each
- * re-implementing their own notion of "allowed next stage".
- *
- * Deliberately NOT included here: dormant -> contacted and canceled -> contacted.
- * Those two edges exist in the domain but are only reachable through
- * `reactivate_lead`'s own evidence check (see reactivate.ts), never through
- * this generic edge table -- that's what makes "the agent decided enough time
- * had passed" impossible to satisfy by itself.
- */
-export const STAGE_EDGES: Record<Stage, Stage[]> = {
-  new: ["contacted"],
-  contacted: ["qualified", "dormant"],
-  qualified: ["viewing_scheduled", "dormant"],
-  viewing_scheduled: ["decision_pending"],
-  decision_pending: ["won", "lost", "canceled"],
-  canceled: ["dormant"],
-  dormant: [],
-  won: [],
-  lost: [],
-};
-
-export const REACTIVATABLE_STAGES: Stage[] = ["dormant", "canceled"];
-
-// Contact-frequency, reactivation-evidence, and agent-loop limits all live in
-// src/config/limits.ts now -- see that file for the single list of every
-// tunable threshold in the system.
+export { canReactivateFrom };
 
 export function assertStageTransition(from: Stage, to: Stage): void {
-  const allowed = STAGE_EDGES[from] ?? [];
-  if (!allowed.includes(to)) {
+  if (!isLegalStageTransition(from, to)) {
+    const allowed = STAGE_EDGES[from] ?? [];
     throw new ToolError(
       "INVALID_TRANSITION",
       `Cannot move lead from stage '${from}' to '${to}'. Allowed next stages from '${from}': ${
@@ -43,13 +17,9 @@ export function assertStageTransition(from: Stage, to: Stage): void {
   }
 }
 
-export function canReactivateFrom(stage: Stage): boolean {
-  return REACTIVATABLE_STAGES.includes(stage);
-}
-
 /** Lead has enough profile signal to be treated as "qualified" once contacted. */
-export function hasSufficientProfile(lead: Pick<Lead, "budget" | "location_pref" | "property_interest">): boolean {
-  return Boolean(lead.budget && lead.location_pref && lead.property_interest);
+export function hasSufficientProfile(lead: Pick<Lead, "budget_max" | "location_pref" | "property_interest">): boolean {
+  return Boolean(lead.budget_max && lead.location_pref && lead.property_interest);
 }
 
 /**
@@ -58,7 +28,7 @@ export function hasSufficientProfile(lead: Pick<Lead, "budget" | "location_pref"
  * `send_message` doesn't have to inline funnel logic.
  */
 export function nextStageAfterMessageSend(
-  lead: Pick<Lead, "stage" | "contact_count" | "budget" | "location_pref" | "property_interest">,
+  lead: Pick<Lead, "stage" | "contact_count" | "budget_max" | "location_pref" | "property_interest">,
   hadRecentResponse: boolean
 ): Stage {
   const { stage } = lead;

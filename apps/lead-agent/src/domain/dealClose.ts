@@ -1,4 +1,4 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { Db } from "../db/types.js";
 import { getLead, updateLead, insertAudit } from "../db/queries.js";
 import { ToolError } from "./errors.js";
 import { assertStageTransition, applyWonTransition } from "./stateMachine.js";
@@ -12,20 +12,20 @@ export type DealOutcome = Extract<Stage, "won" | "lost" | "canceled">;
  * it. It's a human action, exactly like approve/reject, so it lives here
  * rather than in src/tools, and is logged to audit_log with actor='human'.
  */
-export function closeDeal(db: DatabaseSync, leadId: number, outcome: DealOutcome): void {
-  const lead = getLead(db, leadId);
+export async function closeDeal(db: Db, leadId: string, outcome: DealOutcome): Promise<void> {
+  const lead = await getLead(db, leadId);
   if (!lead) throw new ToolError("NOT_FOUND", `No lead with id ${leadId}.`);
 
   assertStageTransition(lead.stage, outcome);
 
   if (outcome === "won") {
     const flip = applyWonTransition(lead);
-    updateLead(db, leadId, { stage: flip.stage, segment: flip.segment });
+    await updateLead(db, leadId, { stage: flip.stage, segment: flip.segment });
   } else {
-    updateLead(db, leadId, { stage: outcome });
+    await updateLead(db, leadId, { stage: outcome });
   }
 
-  insertAudit(db, {
+  await insertAudit(db, {
     lead_id: leadId,
     tool_name: "close_deal",
     input_json: { lead_id: leadId, outcome },

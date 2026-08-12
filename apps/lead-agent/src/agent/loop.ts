@@ -1,4 +1,4 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { Db } from "../db/types.js";
 import OpenAI from "openai";
 import { OPENAI_TOOLS } from "./openaiTools.js";
 import { buildSystemPrompt, buildUserTurn } from "./prompts.js";
@@ -141,7 +141,7 @@ export type RunOutcome =
   | { kind: "no_action_taken" };
 
 export interface RunResult {
-  leadId: number;
+  leadId: string;
   outcome: RunOutcome;
   assistantTurns: number;
   rateLimitInfo?: RateLimitInfo;
@@ -176,13 +176,13 @@ export function getClient(): OpenAI {
  * will simply reflect whatever already went through.
  */
 export async function runAgentForLead(
-  db: DatabaseSync,
-  leadId: number,
+  db: Db,
+  leadId: string,
   client: OpenAI = getClient(),
   retryOpts: RetryOptions = {},
   onProgress?: ProgressCallback
 ): Promise<RunResult> {
-  const lead = getLead(db, leadId);
+  const lead = await getLead(db, leadId);
   if (!lead) throw new Error(`No lead with id ${leadId}`);
 
   const startedAt = nowIso();
@@ -190,14 +190,14 @@ export async function runAgentForLead(
   let totalTokens = 0;
   let lastRateLimitInfo: RateLimitInfo | undefined;
 
-  function finish(outcome: RunOutcome, turns: number): RunResult {
+  async function finish(outcome: RunOutcome, turns: number): Promise<RunResult> {
     const outcomeToMetric: Record<RunOutcome["kind"], RunOutcomeKind> = {
       awaiting_approval: "proposal_created",
       sent: "sent",
       escalated: "escalated",
       no_action_taken: "no_action",
     };
-    insertRunMetric(db, {
+    await insertRunMetric(db, {
       lead_id: leadId,
       started_at: startedAt,
       ended_at: nowIso(),
@@ -236,7 +236,7 @@ export async function runAgentForLead(
       // gracefully with a clear reason instead.
       const message = e instanceof Error ? e.message : String(e);
       toolCallCount += 1;
-      dispatchToolCall(db, leadId, "escalate_to_agent", {
+      await dispatchToolCall(db, leadId, "escalate_to_agent", {
         lead_id: leadId,
         reason: `LLM call failed after retries: ${message}`,
         system_triggered: true,
@@ -256,7 +256,7 @@ export async function runAgentForLead(
       noToolCallStreak += 1;
       if (noToolCallStreak >= 2) {
         toolCallCount += 1;
-        dispatchToolCall(db, leadId, "escalate_to_agent", {
+        await dispatchToolCall(db, leadId, "escalate_to_agent", {
           lead_id: leadId,
           reason: `Agent stopped calling tools without reaching a decision. Last message: ${message.content ?? "(empty)"}`,
           system_triggered: true,
@@ -283,7 +283,7 @@ export async function runAgentForLead(
       }
 
       toolCallCount += 1;
-      const result = dispatchToolCall(db, leadId, toolCall.function.name, args);
+      const result = await dispatchToolCall(db, leadId, toolCall.function.name, args);
       messages.push({
         role: "tool",
         tool_call_id: toolCall.id,
@@ -305,7 +305,7 @@ export async function runAgentForLead(
   }
 
   toolCallCount += 1;
-  dispatchToolCall(db, leadId, "escalate_to_agent", {
+  await dispatchToolCall(db, leadId, "escalate_to_agent", {
     lead_id: leadId,
     reason: `Agent loop exceeded ${MAX_ASSISTANT_TURNS} turns without reaching a stopping point.`,
     system_triggered: true,

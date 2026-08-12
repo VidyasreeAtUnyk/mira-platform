@@ -1,199 +1,154 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { Db } from "./types.js";
 import type {
   Lead,
-  Interaction,
+  EngagementEvent,
+  EngagementEventType,
   Proposal,
+  ProposalType,
+  ProposalStatus,
   AuditLogRow,
+  AuditActor,
   Property,
   PropertyPriceHistory,
-  Actor,
   RunMetric,
   RunOutcomeKind,
 } from "../domain/types.js";
 import { nowIso } from "./client.js";
 import { LOCK_TIMEOUT_MS } from "../config/limits.js";
 
-// node:sqlite's TS types don't export SQLInputValue/SQLOutputValue, so we
-// bind params as `any` at the call boundary here and cast rows back to our
-// own domain types -- this file is the only place that does so.
-type Params = Record<string, unknown>;
-
-function bind(params: Params) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return params as any;
+export async function getLead(db: Db, id: string): Promise<Lead | undefined> {
+  const result = await db.query<Lead>("SELECT * FROM leads WHERE id = $1", [id]);
+  return result.rows[0];
 }
 
-function normalizeRow<T>(row: unknown): T {
-  return row as T;
+export async function listLeads(db: Db): Promise<Lead[]> {
+  const result = await db.query<Lead>("SELECT * FROM leads ORDER BY created_at, id");
+  return result.rows;
 }
 
-function normalizeRows<T>(rows: unknown[]): T[] {
-  return rows as T[];
-}
-
-export function getLead(db: DatabaseSync, id: number): Lead | undefined {
-  const row = db.prepare("SELECT * FROM leads WHERE id = $id").get(bind({ $id: id }));
-  return row ? normalizeRow<Lead>(row) : undefined;
-}
-
-export function listLeads(db: DatabaseSync): Lead[] {
-  return normalizeRows<Lead>(db.prepare("SELECT * FROM leads ORDER BY id").all());
-}
-
-export function updateLead(db: DatabaseSync, id: number, patch: Partial<Lead>): void {
+export async function updateLead(db: Db, id: string, patch: Partial<Lead>): Promise<void> {
   const keys = Object.keys(patch);
   if (keys.length === 0) return;
-  const setClause = keys.map((k) => `${k} = $${k}`).join(", ");
-  const params: Params = { $id: id };
-  for (const k of keys) params[`$${k}`] = (patch as Record<string, unknown>)[k];
-  db.prepare(`UPDATE leads SET ${setClause} WHERE id = $id`).run(bind(params));
+  const setClause = keys.map((k, i) => `${k} = $${i + 2}`).join(", ");
+  const values = keys.map((k) => (patch as Record<string, unknown>)[k]);
+  await db.query(`UPDATE leads SET ${setClause} WHERE id = $1`, [id, ...values]);
 }
 
-export function insertInteraction(
-  db: DatabaseSync,
-  input: { lead_id: number; type: Interaction["type"]; timestamp?: string; detail?: string | null }
-): Interaction {
-  const timestamp = input.timestamp ?? nowIso();
-  const result = db
-    .prepare(
-      "INSERT INTO interactions (lead_id, type, timestamp, detail) VALUES ($lead_id, $type, $timestamp, $detail)"
-    )
-    .run(
-      bind({
-        $lead_id: input.lead_id,
-        $type: input.type,
-        $timestamp: timestamp,
-        $detail: input.detail ?? null,
-      })
-    );
-  return getInteraction(db, Number(result.lastInsertRowid))!;
-}
-
-export function getInteraction(db: DatabaseSync, id: number): Interaction | undefined {
-  const row = db.prepare("SELECT * FROM interactions WHERE id = $id").get(bind({ $id: id }));
-  return row ? normalizeRow<Interaction>(row) : undefined;
-}
-
-export function listInteractions(db: DatabaseSync, leadId: number): Interaction[] {
-  return normalizeRows<Interaction>(
-    db
-      .prepare("SELECT * FROM interactions WHERE lead_id = $lead_id ORDER BY timestamp ASC, id ASC")
-      .all(bind({ $lead_id: leadId }))
+export async function insertEngagementEvent(
+  db: Db,
+  input: { lead_id: string; type: EngagementEventType; created_at?: string; detail?: string | null }
+): Promise<EngagementEvent> {
+  const createdAt = input.created_at ?? nowIso();
+  const result = await db.query<EngagementEvent>(
+    "INSERT INTO engagement_events (lead_id, type, detail, created_at) VALUES ($1, $2, $3, $4) RETURNING *",
+    [input.lead_id, input.type, input.detail ?? null, createdAt]
   );
+  return result.rows[0];
 }
 
-export function insertProposal(
-  db: DatabaseSync,
-  input: { lead_id: number; type: Proposal["type"]; content: string; proposed_time?: string | null }
-): Proposal {
-  const created_at = nowIso();
-  const result = db
-    .prepare(
-      `INSERT INTO proposals (lead_id, type, content, status, rejection_reason, proposed_time, created_at)
-       VALUES ($lead_id, $type, $content, 'pending', NULL, $proposed_time, $created_at)`
-    )
-    .run(
-      bind({
-        $lead_id: input.lead_id,
-        $type: input.type,
-        $content: input.content,
-        $proposed_time: input.proposed_time ?? null,
-        $created_at: created_at,
-      })
-    );
-  return getProposal(db, Number(result.lastInsertRowid))!;
+export async function getEngagementEvent(db: Db, id: string): Promise<EngagementEvent | undefined> {
+  const result = await db.query<EngagementEvent>("SELECT * FROM engagement_events WHERE id = $1", [id]);
+  return result.rows[0];
 }
 
-export function getProposal(db: DatabaseSync, id: number): Proposal | undefined {
-  const row = db.prepare("SELECT * FROM proposals WHERE id = $id").get(bind({ $id: id }));
-  return row ? normalizeRow<Proposal>(row) : undefined;
+export async function listEngagementEvents(db: Db, leadId: string): Promise<EngagementEvent[]> {
+  const result = await db.query<EngagementEvent>(
+    "SELECT * FROM engagement_events WHERE lead_id = $1 ORDER BY created_at ASC, id ASC",
+    [leadId]
+  );
+  return result.rows;
 }
 
-export function listProposals(db: DatabaseSync, filter?: { status?: Proposal["status"]; lead_id?: number }): Proposal[] {
+export async function insertProposal(
+  db: Db,
+  input: { lead_id: string; type: ProposalType; content: string; proposed_time?: string | null }
+): Promise<Proposal> {
+  const result = await db.query<Proposal>(
+    `INSERT INTO proposals (lead_id, type, content, status, rejection_reason, proposed_time, created_at)
+     VALUES ($1, $2, $3, 'pending', NULL, $4, $5) RETURNING *`,
+    [input.lead_id, input.type, input.content, input.proposed_time ?? null, nowIso()]
+  );
+  return result.rows[0];
+}
+
+export async function getProposal(db: Db, id: string): Promise<Proposal | undefined> {
+  const result = await db.query<Proposal>("SELECT * FROM proposals WHERE id = $1", [id]);
+  return result.rows[0];
+}
+
+export async function listProposals(
+  db: Db,
+  filter?: { status?: ProposalStatus; lead_id?: string }
+): Promise<Proposal[]> {
   const clauses: string[] = [];
-  const params: Params = {};
+  const params: unknown[] = [];
   if (filter?.status) {
-    clauses.push("status = $status");
-    params.$status = filter.status;
+    params.push(filter.status);
+    clauses.push(`status = $${params.length}`);
   }
   if (filter?.lead_id !== undefined) {
-    clauses.push("lead_id = $lead_id");
-    params.$lead_id = filter.lead_id;
+    params.push(filter.lead_id);
+    clauses.push(`lead_id = $${params.length}`);
   }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-  return normalizeRows<Proposal>(
-    db.prepare(`SELECT * FROM proposals ${where} ORDER BY created_at ASC, id ASC`).all(bind(params))
-  );
+  const result = await db.query<Proposal>(`SELECT * FROM proposals ${where} ORDER BY created_at ASC, id ASC`, params);
+  return result.rows;
 }
 
-export function updateProposal(db: DatabaseSync, id: number, patch: Partial<Proposal>): void {
+export async function updateProposal(db: Db, id: string, patch: Partial<Proposal>): Promise<void> {
   const keys = Object.keys(patch);
   if (keys.length === 0) return;
-  const setClause = keys.map((k) => `${k} = $${k}`).join(", ");
-  const params: Params = { $id: id };
-  for (const k of keys) params[`$${k}`] = (patch as Record<string, unknown>)[k];
-  db.prepare(`UPDATE proposals SET ${setClause} WHERE id = $id`).run(bind(params));
+  const setClause = keys.map((k, i) => `${k} = $${i + 2}`).join(", ");
+  const values = keys.map((k) => (patch as Record<string, unknown>)[k]);
+  await db.query(`UPDATE proposals SET ${setClause} WHERE id = $1`, [id, ...values]);
 }
 
-export function insertAudit(
-  db: DatabaseSync,
-  input: { lead_id: number | null; tool_name: string; input_json: unknown; output_json: unknown; actor: Actor }
-): AuditLogRow {
-  const timestamp = nowIso();
-  const result = db
-    .prepare(
-      `INSERT INTO audit_log (lead_id, tool_name, input_json, output_json, timestamp, actor)
-       VALUES ($lead_id, $tool_name, $input_json, $output_json, $timestamp, $actor)`
-    )
-    .run(
-      bind({
-        $lead_id: input.lead_id,
-        $tool_name: input.tool_name,
-        $input_json: JSON.stringify(input.input_json),
-        $output_json: JSON.stringify(input.output_json),
-        $timestamp: timestamp,
-        $actor: input.actor,
-      })
-    );
-  return normalizeRow<AuditLogRow>(
-    db.prepare("SELECT * FROM audit_log WHERE id = $id").get(bind({ $id: Number(result.lastInsertRowid) }))
+export async function insertAudit(
+  db: Db,
+  input: { lead_id: string | null; tool_name: string; input_json: unknown; output_json: unknown; actor: AuditActor }
+): Promise<AuditLogRow> {
+  const result = await db.query<AuditLogRow>(
+    `INSERT INTO audit_log (lead_id, tool_name, input_json, output_json, actor, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [input.lead_id, input.tool_name, JSON.stringify(input.input_json), JSON.stringify(input.output_json), input.actor, nowIso()]
   );
+  return result.rows[0];
 }
 
-export function listAudit(db: DatabaseSync, leadId: number): AuditLogRow[] {
-  return normalizeRows<AuditLogRow>(
-    db.prepare("SELECT * FROM audit_log WHERE lead_id = $lead_id ORDER BY timestamp ASC, id ASC").all(bind({ $lead_id: leadId }))
+export async function listAudit(db: Db, leadId: string): Promise<AuditLogRow[]> {
+  const result = await db.query<AuditLogRow>(
+    "SELECT * FROM audit_log WHERE lead_id = $1 ORDER BY created_at ASC, id ASC",
+    [leadId]
   );
+  return result.rows;
 }
 
-export function countSendsInWindow(db: DatabaseSync, leadId: number, sinceIso: string): number {
-  const row = normalizeRow<{ cnt: number }>(
-    db
-      .prepare(
-        `SELECT COUNT(*) as cnt FROM audit_log
-         WHERE lead_id = $lead_id AND tool_name = 'send_message' AND timestamp >= $since
-         AND json_extract(output_json, '$.ok') = 1`
-      )
-      .get(bind({ $lead_id: leadId, $since: sinceIso }))
+export async function countSendsInWindow(db: Db, leadId: string, sinceIso: string): Promise<number> {
+  const result = await db.query<{ cnt: string }>(
+    `SELECT COUNT(*) as cnt FROM audit_log
+     WHERE lead_id = $1 AND tool_name = 'send_message' AND created_at >= $2
+     AND output_json->>'ok' = 'true'`,
+    [leadId, sinceIso]
   );
-  return row.cnt;
+  return Number(result.rows[0].cnt);
 }
 
-export function listProperties(db: DatabaseSync): Property[] {
-  return normalizeRows<Property>(db.prepare("SELECT * FROM properties ORDER BY id").all());
+export async function listProperties(db: Db): Promise<Property[]> {
+  const result = await db.query<Property>("SELECT * FROM properties ORDER BY created_at, id");
+  return result.rows;
 }
 
-export function getProperty(db: DatabaseSync, id: number): Property | undefined {
-  const row = db.prepare("SELECT * FROM properties WHERE id = $id").get(bind({ $id: id }));
-  return row ? normalizeRow<Property>(row) : undefined;
+export async function getProperty(db: Db, id: string): Promise<Property | undefined> {
+  const result = await db.query<Property>("SELECT * FROM properties WHERE id = $1", [id]);
+  return result.rows[0];
 }
 
-export function listPriceHistory(db: DatabaseSync, propertyId: number): PropertyPriceHistory[] {
-  return normalizeRows<PropertyPriceHistory>(
-    db
-      .prepare("SELECT * FROM property_price_history WHERE property_id = $property_id ORDER BY year ASC")
-      .all(bind({ $property_id: propertyId }))
+export async function listPriceHistory(db: Db, propertyId: string): Promise<PropertyPriceHistory[]> {
+  const result = await db.query<PropertyPriceHistory>(
+    "SELECT * FROM property_price_history WHERE property_id = $1 ORDER BY year ASC",
+    [propertyId]
   );
+  return result.rows;
 }
 
 export type EscalationStatus =
@@ -211,20 +166,17 @@ export type EscalationStatus =
  * happened" apart from "the last attempt just failed" instead of both
  * reading as identical blanks.
  */
-export function getEscalationStatus(db: DatabaseSync, leadId: number): EscalationStatus {
-  const row = normalizeRow<{ tool_name: string; output_json: string } | undefined>(
-    db
-      .prepare("SELECT tool_name, output_json FROM audit_log WHERE lead_id = $lead_id ORDER BY id DESC LIMIT 1")
-      .get(bind({ $lead_id: leadId }))
+export async function getEscalationStatus(db: Db, leadId: string): Promise<EscalationStatus> {
+  const result = await db.query<{ tool_name: string; output_json: { escalated?: boolean; system_triggered?: boolean } }>(
+    "SELECT tool_name, output_json FROM audit_log WHERE lead_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1",
+    [leadId]
   );
+  const row = result.rows[0];
   if (!row || row.tool_name !== "escalate_to_agent") return "none";
-  try {
-    const output = JSON.parse(row.output_json) as { escalated?: boolean; system_triggered?: boolean };
-    if (!output.escalated) return "none";
-    return output.system_triggered ? "transient" : "parked";
-  } catch {
-    return "none";
-  }
+  // pg returns jsonb columns already parsed -- no JSON.parse needed.
+  const output = row.output_json;
+  if (!output.escalated) return "none";
+  return output.system_triggered ? "transient" : "parked";
 }
 
 /**
@@ -236,38 +188,31 @@ export function getEscalationStatus(db: DatabaseSync, leadId: number): Escalatio
  * budget ran out) never parks: that's an infrastructure hiccup, not a
  * judgment call about the lead, so it's simply retried on the next pass.
  */
-export function isParkedOnEscalation(db: DatabaseSync, leadId: number): boolean {
-  return getEscalationStatus(db, leadId) === "parked";
+export async function isParkedOnEscalation(db: Db, leadId: string): Promise<boolean> {
+  return (await getEscalationStatus(db, leadId)) === "parked";
 }
 
-export function insertRunMetric(
-  db: DatabaseSync,
+export async function insertRunMetric(
+  db: Db,
   input: {
-    lead_id: number;
+    lead_id: string;
     started_at: string;
     ended_at: string;
     outcome: RunOutcomeKind;
     tool_call_count: number;
     estimated_token_cost: number;
   }
-): void {
-  db.prepare(
+): Promise<void> {
+  await db.query(
     `INSERT INTO run_metrics (lead_id, started_at, ended_at, outcome, tool_call_count, estimated_token_cost)
-     VALUES ($lead_id, $started_at, $ended_at, $outcome, $tool_call_count, $estimated_token_cost)`
-  ).run(
-    bind({
-      $lead_id: input.lead_id,
-      $started_at: input.started_at,
-      $ended_at: input.ended_at,
-      $outcome: input.outcome,
-      $tool_call_count: input.tool_call_count,
-      $estimated_token_cost: input.estimated_token_cost,
-    })
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [input.lead_id, input.started_at, input.ended_at, input.outcome, input.tool_call_count, input.estimated_token_cost]
   );
 }
 
-export function listRunMetrics(db: DatabaseSync): RunMetric[] {
-  return normalizeRows<RunMetric>(db.prepare("SELECT * FROM run_metrics ORDER BY id").all());
+export async function listRunMetrics(db: Db): Promise<RunMetric[]> {
+  const result = await db.query<RunMetric>("SELECT * FROM run_metrics ORDER BY started_at, id");
+  return result.rows;
 }
 
 /**
@@ -275,8 +220,8 @@ export function listRunMetrics(db: DatabaseSync): RunMetric[] {
  * time. A lock older than LOCK_TIMEOUT_MS is treated as abandoned (the
  * process that held it presumably crashed) and can be re-acquired by anyone.
  */
-export function tryAcquireLock(db: DatabaseSync, leadId: number, workerId: string, timeoutMs = LOCK_TIMEOUT_MS): boolean {
-  const lead = getLead(db, leadId);
+export async function tryAcquireLock(db: Db, leadId: string, workerId: string, timeoutMs = LOCK_TIMEOUT_MS): Promise<boolean> {
+  const lead = await getLead(db, leadId);
   if (!lead) return false;
 
   if (lead.locked_at && lead.locked_by) {
@@ -284,27 +229,27 @@ export function tryAcquireLock(db: DatabaseSync, leadId: number, workerId: strin
     if (ageMs < timeoutMs) return false; // still held by someone else and not expired
   }
 
-  db.prepare("UPDATE leads SET locked_at = $now, locked_by = $worker WHERE id = $id").run(
-    bind({ $now: nowIso(), $worker: workerId, $id: leadId })
-  );
+  await db.query("UPDATE leads SET locked_at = $1, locked_by = $2 WHERE id = $3", [nowIso(), workerId, leadId]);
   return true;
 }
 
 /** Only releases the lock if this worker still holds it -- never clears a newer lock it doesn't own. */
-export function releaseLock(db: DatabaseSync, leadId: number, workerId: string): void {
-  db.prepare("UPDATE leads SET locked_at = NULL, locked_by = NULL WHERE id = $id AND locked_by = $worker").run(
-    bind({ $id: leadId, $worker: workerId })
+export async function releaseLock(db: Db, leadId: string, workerId: string): Promise<void> {
+  await db.query("UPDATE leads SET locked_at = NULL, locked_by = NULL WHERE id = $1 AND locked_by = $2", [
+    leadId,
+    workerId,
+  ]);
+}
+
+export async function getRunState(db: Db): Promise<{ current_lead_id: string | null } | undefined> {
+  const result = await db.query<{ current_lead_id: string | null }>("SELECT * FROM run_state WHERE id = 1");
+  return result.rows[0];
+}
+
+export async function setRunState(db: Db, leadId: string | null): Promise<void> {
+  await db.query(
+    `INSERT INTO run_state (id, current_lead_id, updated_at) VALUES (1, $1, $2)
+     ON CONFLICT (id) DO UPDATE SET current_lead_id = $1, updated_at = $2`,
+    [leadId, nowIso()]
   );
-}
-
-export function getRunState(db: DatabaseSync): { current_lead_id: number | null } | undefined {
-  const row = db.prepare("SELECT * FROM run_state WHERE id = 1").get();
-  return row ? normalizeRow<{ current_lead_id: number | null }>(row) : undefined;
-}
-
-export function setRunState(db: DatabaseSync, leadId: number | null): void {
-  db.prepare(
-    `INSERT INTO run_state (id, current_lead_id, updated_at) VALUES (1, $lead_id, $updated_at)
-     ON CONFLICT(id) DO UPDATE SET current_lead_id = $lead_id, updated_at = $updated_at`
-  ).run(bind({ $lead_id: leadId, $updated_at: nowIso() }));
 }

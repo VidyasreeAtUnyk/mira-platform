@@ -1,13 +1,13 @@
 import { z } from "zod";
 import type { ToolDefinition } from "./types.js";
-import { getLead, getProposal, listInteractions, updateLead, countSendsInWindow } from "../db/queries.js";
+import { getLead, getProposal, listEngagementEvents, updateLead, countSendsInWindow } from "../db/queries.js";
 import { nowIso } from "../db/client.js";
 import { ToolError } from "../domain/errors.js";
 import { nextStageAfterMessageSend, nextStageAfterViewingSend } from "../domain/stateMachine.js";
 import { CONTACT_WINDOW_DAYS, MAX_SENDS_IN_WINDOW } from "../config/limits.js";
 
 const schema = z.object({
-  proposal_id: z.number().int().positive(),
+  proposal_id: z.string().uuid(),
 });
 
 export const sendMessage: ToolDefinition<z.infer<typeof schema>> = {
@@ -15,8 +15,8 @@ export const sendMessage: ToolDefinition<z.infer<typeof schema>> = {
   description:
     "Execute contact for a proposal that a human has already approved. This is mocked (logs MOCK SEND, no real integration). Fails if the proposal is not approved, the lead is do_not_contact, or the lead has already hit the outreach rate cap.",
   schema,
-  execute: (db, input) => {
-    const proposal = getProposal(db, input.proposal_id);
+  execute: async (db, input) => {
+    const proposal = await getProposal(db, input.proposal_id);
     if (!proposal) throw new ToolError("NOT_FOUND", `No proposal with id ${input.proposal_id}.`);
 
     // Guardrail 1 (hard prohibition), part A: only an approved proposal can ever be sent.
@@ -27,7 +27,7 @@ export const sendMessage: ToolDefinition<z.infer<typeof schema>> = {
       );
     }
 
-    const lead = getLead(db, proposal.lead_id);
+    const lead = await getLead(db, proposal.lead_id);
     if (!lead) throw new ToolError("NOT_FOUND", `No lead with id ${proposal.lead_id}.`);
 
     // Guardrail 1, part B: do_not_contact is re-checked here independently of propose_message.
@@ -46,7 +46,7 @@ export const sendMessage: ToolDefinition<z.infer<typeof schema>> = {
 
     // Guardrail 3: contact-frequency cap, rolling window, enforced regardless of the agent's plan.
     const since = new Date(Date.now() - CONTACT_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    const sendsInWindow = countSendsInWindow(db, lead.id, since);
+    const sendsInWindow = await countSendsInWindow(db, lead.id, since);
     if (sendsInWindow >= MAX_SENDS_IN_WINDOW) {
       throw new ToolError(
         "RATE_LIMITED",
@@ -54,24 +54,24 @@ export const sendMessage: ToolDefinition<z.infer<typeof schema>> = {
       );
     }
 
-    const interactions = listInteractions(db, lead.id);
+    const interactions = await listEngagementEvents(db, lead.id);
     const hadRecentResponse = interactions.some(
       (i) =>
         (i.type === "reply" || i.type === "inquiry") &&
-        (!lead.last_contacted_at || i.timestamp > lead.last_contacted_at)
+        (!lead.last_contacted_at || i.created_at > lead.last_contacted_at)
     );
 
     const nextStage =
       proposal.type === "viewing" ? nextStageAfterViewingSend(lead.stage) : nextStageAfterMessageSend(lead, hadRecentResponse);
 
     const timestamp = nowIso();
-    updateLead(db, lead.id, {
+    await updateLead(db, lead.id, {
       last_contacted_at: timestamp,
       contact_count: lead.contact_count + 1,
       stage: nextStage,
     });
 
-    const logLine = `MOCK SEND: ${proposal.content} to ${lead.contact}`;
+    const logLine = `MOCK SEND: ${proposal.content} to ${lead.phone}`;
     return {
       ok: true as const,
       mock_send_log: logLine,

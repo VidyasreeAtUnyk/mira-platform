@@ -1,4 +1,4 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { Db } from "../db/types.js";
 import type { AnyToolDefinition } from "./types.js";
 import { getLeadContext } from "./getLeadContext.js";
 import { checkContactEligibility } from "./checkContactEligibility.js";
@@ -44,33 +44,33 @@ export interface DispatchResult {
  * in the tool's own input (e.g. get_property_market_data takes property_id,
  * not lead_id).
  */
-export function dispatchToolCall(
-  db: DatabaseSync,
-  leadId: number,
+export async function dispatchToolCall(
+  db: Db,
+  leadId: string,
   toolName: string,
   rawInput: unknown
-): DispatchResult {
+): Promise<DispatchResult> {
   const tool = TOOLS_BY_NAME.get(toolName);
   if (!tool) {
     const err = new ToolError("INVALID_INPUT", `Unknown tool '${toolName}'.`);
-    insertAudit(db, { lead_id: leadId, tool_name: toolName, input_json: rawInput, output_json: err.toJSON(), actor: "agent" });
+    await insertAudit(db, { lead_id: leadId, tool_name: toolName, input_json: rawInput, output_json: err.toJSON(), actor: "agent" });
     return { ok: false, output: err.toJSON() };
   }
 
   const parsed = tool.schema.safeParse(rawInput);
   if (!parsed.success) {
     const err = new ToolError("INVALID_INPUT", `Invalid input for ${toolName}: ${parsed.error.message}`);
-    insertAudit(db, { lead_id: leadId, tool_name: toolName, input_json: rawInput, output_json: err.toJSON(), actor: "agent" });
+    await insertAudit(db, { lead_id: leadId, tool_name: toolName, input_json: rawInput, output_json: err.toJSON(), actor: "agent" });
     return { ok: false, output: err.toJSON() };
   }
 
   try {
-    const output = tool.execute(db, parsed.data);
-    insertAudit(db, { lead_id: leadId, tool_name: toolName, input_json: parsed.data, output_json: output, actor: "agent" });
+    const output = await tool.execute(db, parsed.data);
+    await insertAudit(db, { lead_id: leadId, tool_name: toolName, input_json: parsed.data, output_json: output, actor: "agent" });
     return { ok: true, output };
   } catch (e) {
     const err = isToolError(e) ? e : new ToolError("INVALID_INPUT", String((e as Error)?.message ?? e));
-    insertAudit(db, { lead_id: leadId, tool_name: toolName, input_json: parsed.data, output_json: err.toJSON(), actor: "agent" });
+    await insertAudit(db, { lead_id: leadId, tool_name: toolName, input_json: parsed.data, output_json: err.toJSON(), actor: "agent" });
     return { ok: false, output: err.toJSON() };
   }
 }

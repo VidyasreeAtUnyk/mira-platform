@@ -56,6 +56,8 @@ export interface Lead {
     email: string | null;
     lead_type: LeadType;
     property_type: PropertyType | null;
+    /** Freeform discovery-stage text (lead-agent). Distinct from property_type -- see shared-db/schema.sql. */
+    property_interest: string | null;
     budget_min: number | null;
     budget_max: number | null;
     currency: string;
@@ -164,6 +166,7 @@ export interface CreateLeadInput {
     email?: string;
     lead_type: LeadType;
     property_type?: PropertyType;
+    property_interest?: string;
     budget_min?: number;
     budget_max?: number;
     preferred_areas?: string[];

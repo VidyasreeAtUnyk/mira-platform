@@ -4,7 +4,7 @@ import { getProperty, listPriceHistory } from "../db/queries.js";
 import { ToolError } from "../domain/errors.js";
 
 const schema = z.object({
-  property_id: z.number().int().positive(),
+  property_id: z.string().uuid(),
 });
 
 function linearRegressionNextYear(points: { year: number; avg_price: number }[]): number | null {
@@ -34,10 +34,10 @@ export const getPropertyMarketData: ToolDefinition<z.infer<typeof schema>> = {
   description:
     "Returns price history for a property plus a deterministically computed trend (% change over the last up-to-3 data points, and a linear-regression projection for next year). This is the only legitimate source of price/trend figures -- never invent your own.",
   schema,
-  execute: (db, input) => {
-    const property = getProperty(db, input.property_id);
+  execute: async (db, input) => {
+    const property = await getProperty(db, input.property_id);
     if (!property) throw new ToolError("NOT_FOUND", `No property with id ${input.property_id}.`);
-    const history = listPriceHistory(db, input.property_id);
+    const history = await listPriceHistory(db, input.property_id);
 
     const window = history.slice(-3);
     let percentChangeOverWindow: number | null = null;

@@ -5,7 +5,7 @@ loadEnvFile();
 import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
-import { getDb, DEFAULT_DB_PATH } from "../db/client.js";
+import { getDb, ready } from "../db/client.js";
 import {
   listLeads,
   listProposals,
@@ -28,38 +28,40 @@ import { computeAggregateMetrics } from "../domain/metrics.js";
 const program = new Command();
 program.name("lead-followup").description("Real estate lead follow-up agent CLI");
 
-function db() {
-  return getDb(DEFAULT_DB_PATH);
+async function db() {
+  const pool = getDb();
+  await ready();
+  return pool;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
- * Validates a CLI numeric argument instead of letting Number()'s NaN
- * silently propagate -- an invalid id flowing into a DB lookup or a queue
- * filter reads as a legitimate "not found"/"empty" result rather than the
- * actual problem (a typo or bad input), which is actively misleading rather
- * than just unpolished. Returns null (having already printed the error) if
- * invalid, so every call site can just `if (x === null) return;`.
+ * Validates a CLI id argument instead of letting a malformed value flow
+ * silently into a DB lookup, where it would just read as "not found" --
+ * actively misleading rather than just unpolished. Returns null (having
+ * already printed the error) if invalid, so every call site can just
+ * `if (x === null) return;`.
  */
-function parsePositiveInt(raw: string, label: string): number | null {
-  const n = Number(raw);
-  if (!Number.isInteger(n) || n <= 0) {
-    console.log(chalk.red(`Invalid ${label}: '${raw}'. Expected a positive integer.`));
+function parseId(raw: string, label: string): string | null {
+  if (!UUID_RE.test(raw)) {
+    console.log(chalk.red(`Invalid ${label}: '${raw}'. Expected a UUID.`));
     return null;
   }
-  return n;
+  return raw;
 }
 
 program
   .command("dashboard")
   .description("Show all leads with segment, stage, last contact, pending proposals, and escalation status")
-  .action(() => {
-    const database = db();
-    const leads = listLeads(database);
+  .action(async () => {
+    const database = await db();
+    const leads = await listLeads(database);
     const table = new Table({
       head: ["ID", "Name", "Segment", "Stage", "Last Contacted", "Pending Proposals", "Escalated"],
     });
     for (const lead of leads) {
-      const pending = listProposals(database, { lead_id: lead.id, status: "pending" }).length;
+      const pending = (await listProposals(database, { lead_id: lead.id, status: "pending" })).length;
       table.push([
         lead.id,
         lead.name,
@@ -67,13 +69,13 @@ program
         colorStage(lead.stage, Boolean(lead.do_not_contact)),
         formatTimestamp(lead.last_contacted_at),
         pending > 0 ? chalk.bold(String(pending)) : "0",
-        formatEscalationStatus(getEscalationStatus(database, lead.id)),
+        formatEscalationStatus(await getEscalationStatus(database, lead.id)),
       ]);
     }
     console.log(table.toString());
   });
 
-function formatEscalationStatus(status: ReturnType<typeof getEscalationStatus>): string {
+function formatEscalationStatus(status: Awaited<ReturnType<typeof getEscalationStatus>>): string {
   if (status === "parked") return chalk.red("needs retry");
   // Nothing is retrying this in the background -- no daemon, no cron. It's
   // simply not blocked, so the *next time a person runs `process`* it will
@@ -85,12 +87,12 @@ function formatEscalationStatus(status: ReturnType<typeof getEscalationStatus>):
 program
   .command("proposals")
   .description("Show all pending proposals awaiting human approval")
-  .action(() => {
-    const database = db();
-    const pending = listProposals(database, { status: "pending" });
+  .action(async () => {
+    const database = await db();
+    const pending = await listProposals(database, { status: "pending" });
     const table = new Table({ head: ["ID", "Lead", "Type", "Content", "Created At"] });
     for (const p of pending) {
-      const lead = getLead(database, p.lead_id);
+      const lead = await getLead(database, p.lead_id);
       table.push([p.id, lead?.name ?? `#${p.lead_id}`, p.type, truncate(p.content), formatTimestamp(p.created_at)]);
     }
     console.log(table.toString());
@@ -100,24 +102,22 @@ program
 program
   .command("escalated")
   .description("Show every lead the dashboard's Escalated column flags -- both needing a human retry and self-healing rate-limit hits")
-  .action(() => {
-    const database = db();
+  .action(async () => {
+    const database = await db();
     // Same predicate as dashboard's "Escalated" column (status !== "none") --
     // this command must show a superset consistent with that column, or the
     // two disagree on what "escalated" means for the exact same lead.
-    const escalated = listLeads(database)
-      .map((lead) => ({ lead, status: getEscalationStatus(database, lead.id) }))
-      .filter(({ status }) => status !== "none");
+    const leads = await listLeads(database);
+    const escalated: { lead: (typeof leads)[number]; status: Awaited<ReturnType<typeof getEscalationStatus>> }[] = [];
+    for (const lead of leads) {
+      const status = await getEscalationStatus(database, lead.id);
+      if (status !== "none") escalated.push({ lead, status });
+    }
     const table = new Table({ head: ["ID", "Name", "Segment", "Stage", "Status", "Reason", "Escalated At"] });
     for (const { lead, status } of escalated) {
-      const audit = listAudit(database, lead.id);
+      const audit = await listAudit(database, lead.id);
       const lastRow = audit[audit.length - 1];
-      let reason = "";
-      try {
-        reason = (JSON.parse(lastRow.output_json) as { reason?: string }).reason ?? "";
-      } catch {
-        reason = "";
-      }
+      const reason = (lastRow.output_json as { reason?: string })?.reason ?? "";
       table.push([
         lead.id,
         lead.name,
@@ -125,7 +125,7 @@ program
         colorStage(lead.stage, Boolean(lead.do_not_contact)),
         formatEscalationStatus(status),
         truncate(reason, 60),
-        formatTimestamp(lastRow.timestamp),
+        formatTimestamp(lastRow.created_at),
       ]);
     }
     console.log(table.toString());
@@ -137,37 +137,37 @@ program
 program
   .command("history <leadId>")
   .description("Print the full chronological audit trail for a lead")
-  .action((leadIdArg: string) => {
-    const leadId = parsePositiveInt(leadIdArg, "lead id");
+  .action(async (leadIdArg: string) => {
+    const leadId = parseId(leadIdArg, "lead id");
     if (leadId === null) return;
-    const database = db();
-    const lead = getLead(database, leadId);
+    const database = await db();
+    const lead = await getLead(database, leadId);
     if (!lead) {
       console.log(chalk.red(`No lead with id ${leadId}.`));
       return;
     }
     console.log(chalk.bold(`History for lead ${leadId} -- ${lead.name} (${lead.segment}/${lead.stage})`));
-    const rows = listAudit(database, leadId);
+    const rows = await listAudit(database, leadId);
     if (rows.length === 0) {
       console.log(chalk.dim("No audit entries yet."));
       return;
     }
     for (const row of rows) {
       const actorLabel = row.actor === "human" ? chalk.magenta("human") : chalk.blue("agent");
-      console.log(`\n${chalk.dim(formatTimestamp(row.timestamp))}  [${actorLabel}] ${chalk.bold(row.tool_name)}`);
-      console.log(`  input:  ${row.input_json}`);
-      console.log(`  output: ${row.output_json}`);
+      console.log(`\n${chalk.dim(formatTimestamp(row.created_at))}  [${actorLabel}] ${chalk.bold(row.tool_name)}`);
+      console.log(`  input:  ${JSON.stringify(row.input_json)}`);
+      console.log(`  output: ${JSON.stringify(row.output_json)}`);
     }
   });
 
 program
   .command("approve <proposalId>")
   .description("Approve a pending proposal")
-  .action((proposalIdArg: string) => {
-    const proposalId = parsePositiveInt(proposalIdArg, "proposal id");
+  .action(async (proposalIdArg: string) => {
+    const proposalId = parseId(proposalIdArg, "proposal id");
     if (proposalId === null) return;
-    const database = db();
-    const proposal = getProposal(database, proposalId);
+    const database = await db();
+    const proposal = await getProposal(database, proposalId);
     if (!proposal) {
       console.log(chalk.red(`No proposal with id ${proposalId}.`));
       return;
@@ -176,8 +176,8 @@ program
       console.log(chalk.red(`Proposal ${proposalId} is already '${proposal.status}'.`));
       return;
     }
-    updateProposal(database, proposalId, { status: "approved" });
-    insertAudit(database, {
+    await updateProposal(database, proposalId, { status: "approved" });
+    await insertAudit(database, {
       lead_id: proposal.lead_id,
       tool_name: "approve_proposal",
       input_json: { proposal_id: proposalId },
@@ -190,11 +190,11 @@ program
 program
   .command("reject <proposalId> <reason>")
   .description("Reject a pending proposal with a reason")
-  .action((proposalIdArg: string, reason: string) => {
-    const proposalId = parsePositiveInt(proposalIdArg, "proposal id");
+  .action(async (proposalIdArg: string, reason: string) => {
+    const proposalId = parseId(proposalIdArg, "proposal id");
     if (proposalId === null) return;
-    const database = db();
-    const proposal = getProposal(database, proposalId);
+    const database = await db();
+    const proposal = await getProposal(database, proposalId);
     if (!proposal) {
       console.log(chalk.red(`No proposal with id ${proposalId}.`));
       return;
@@ -203,8 +203,8 @@ program
       console.log(chalk.red(`Proposal ${proposalId} is already '${proposal.status}'.`));
       return;
     }
-    updateProposal(database, proposalId, { status: "rejected", rejection_reason: reason });
-    insertAudit(database, {
+    await updateProposal(database, proposalId, { status: "rejected", rejection_reason: reason });
+    await insertAudit(database, {
       lead_id: proposal.lead_id,
       tool_name: "reject_proposal",
       input_json: { proposal_id: proposalId, reason },
@@ -219,22 +219,27 @@ program
   .description("Run the agent loop over the queue (or a single lead id) -- requires OPENAI_API_KEY")
   .option("-n, --limit <count>", "process at most this many leads this pass (guards against draining a whole day's quota in one run)")
   .action(async (leadIdArg: string | undefined, opts: { limit?: string }) => {
-    const only = leadIdArg !== undefined ? parsePositiveInt(leadIdArg, "lead id") : undefined;
-    if (only === null) return;
-    const limit = opts.limit !== undefined ? parsePositiveInt(opts.limit, "limit") : undefined;
-    if (limit === null) return;
-    const database = db();
+    const only = leadIdArg !== undefined ? parseId(leadIdArg, "lead id") ?? undefined : undefined;
+    if (leadIdArg !== undefined && only === undefined) return;
+    const limit = opts.limit !== undefined ? Number(opts.limit) : undefined;
+    if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
+      console.log(chalk.red(`Invalid limit: '${opts.limit}'. Expected a positive integer.`));
+      return;
+    }
+    const database = await db();
 
     let renderer: RunProgressRenderer | null = null;
-    let activeLeadId: number | null = null;
+    let activeLeadId: string | null = null;
 
     const results = await processQueue(database, undefined, only, undefined, {
+      // Synchronous by contract (ProgressCallback isn't async) -- deliberately
+      // doesn't look up the lead's name here (that would mean awaiting a query
+      // mid-callback, racing subsequent progress ticks for the same lead).
       onProgress: (leadId, progress) => {
         if (activeLeadId !== leadId) {
           activeLeadId = leadId;
-          const lead = getLead(database, leadId);
           renderer = new RunProgressRenderer();
-          renderer.startLead(`Lead ${leadId}${lead ? ` (${lead.name})` : ""}`);
+          renderer.startLead(`Lead ${leadId}`);
         }
         renderer?.onProgress(progress);
       },
@@ -325,17 +330,17 @@ program
 program
   .command("close <leadId> <outcome>")
   .description("Human action: record a deal outcome (won|lost|canceled) for a lead in decision_pending")
-  .action((leadIdArg: string, outcomeArg: string) => {
-    const leadId = parsePositiveInt(leadIdArg, "lead id");
+  .action(async (leadIdArg: string, outcomeArg: string) => {
+    const leadId = parseId(leadIdArg, "lead id");
     if (leadId === null) return;
     const outcome = outcomeArg as DealOutcome;
     if (!["won", "lost", "canceled"].includes(outcome)) {
       console.log(chalk.red("Outcome must be one of: won, lost, canceled"));
       return;
     }
-    const database = db();
+    const database = await db();
     try {
-      closeDeal(database, leadId, outcome);
+      await closeDeal(database, leadId, outcome);
       console.log(chalk.green(`Lead ${leadId} closed as '${outcome}'.`));
     } catch (e) {
       if (isToolError(e)) {
@@ -349,20 +354,20 @@ program
 program
   .command("retry <leadId>")
   .description("Human action: clear a lead's escalation park so the agent will process it again")
-  .action((leadIdArg: string) => {
-    const leadId = parsePositiveInt(leadIdArg, "lead id");
+  .action(async (leadIdArg: string) => {
+    const leadId = parseId(leadIdArg, "lead id");
     if (leadId === null) return;
-    const database = db();
-    const lead = getLead(database, leadId);
+    const database = await db();
+    const lead = await getLead(database, leadId);
     if (!lead) {
       console.log(chalk.red(`No lead with id ${leadId}.`));
       return;
     }
-    if (!isParkedOnEscalation(database, leadId)) {
+    if (!(await isParkedOnEscalation(database, leadId))) {
       console.log(chalk.dim(`Lead ${leadId} isn't currently parked on an escalation -- nothing to do.`));
       return;
     }
-    insertAudit(database, {
+    await insertAudit(database, {
       lead_id: leadId,
       tool_name: "retry_lead",
       input_json: { lead_id: leadId },
@@ -375,9 +380,9 @@ program
 program
   .command("metrics")
   .description("Show aggregate run metrics (escalation rate, tool calls, estimated cost, approval turnaround)")
-  .action(() => {
-    const database = db();
-    const m = computeAggregateMetrics(database);
+  .action(async () => {
+    const database = await db();
+    const m = await computeAggregateMetrics(database);
     const table = new Table();
     table.push(
       { "Total runs": String(m.totalRuns) },
