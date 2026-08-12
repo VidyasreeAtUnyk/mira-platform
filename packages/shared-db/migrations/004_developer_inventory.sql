@@ -1,4 +1,4 @@
--- packages/shared-db/migrations/006_developer_inventory.sql
+-- packages/shared-db/migrations/004_developer_inventory.sql
 --
 -- Additive migration for apps/inventory (SPEC.md module 4: Seller/Developer
 -- Inventory). Written by the inventory-developer module branch

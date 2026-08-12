@@ -1,5 +1,5 @@
 /**
- * Row types for this module's tables (packages/shared-db/migrations/006_developer_inventory.sql).
+ * Row types for this module's tables (packages/shared-db/migrations/004_developer_inventory.sql).
  *
  * Kept local to apps/inventory rather than added to @mira/shared-types: the
  * task scope for this branch only carves out an exception to "don't touch

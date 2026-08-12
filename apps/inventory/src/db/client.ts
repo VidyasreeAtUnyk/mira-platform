@@ -41,7 +41,7 @@ const INVENTORY_MIGRATION_PATH = path.join(
   "packages",
   "shared-db",
   "migrations",
-  "006_developer_inventory.sql"
+  "004_developer_inventory.sql"
 );
 
 /**

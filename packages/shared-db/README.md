@@ -19,6 +19,7 @@ psql mira_dev -f packages/shared-db/schema.sql
 psql mira_dev -f packages/shared-db/migrations/001_trackers_goals.sql
 psql mira_dev -f packages/shared-db/migrations/002_social_posts.sql
 psql mira_dev -f packages/shared-db/migrations/003_transaction_pipeline_and_listings.sql
+psql mira_dev -f packages/shared-db/migrations/004_developer_inventory.sql
 ```
 
 Current migrations:
@@ -49,6 +50,15 @@ Current migrations:
        without visibility into apps/trackers' or apps/social-assistant's
        migrations); renumbered to 003 during the integration pass for a
        gap-free sequence. See PROGRESS-integration.md. -->
+- `004_developer_inventory.sql` (apps/inventory, SPEC.md module 4): new
+  `developer_partners`, `developer_inventory_units`, and MOU-tracking
+  tables for the seller/developer inventory module. Additive only, no
+  changes to schema.sql tables.
+  <!-- Also originally numbered 006 on its source branch (same
+       no-cross-branch-visibility cause as apps/pipeline above --
+       apps/pipeline's own PROGRESS-pipeline.md flagged this exact
+       collision). Renumbered to 004 during the integration pass. See
+       PROGRESS-integration.md. -->
 
 Tables that stay app-local (not promoted here) keep their own migration
 under the owning app's directory -- e.g. `apps/lead-agent`'s `run_state`/
