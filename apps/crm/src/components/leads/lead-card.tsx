@@ -4,7 +4,7 @@
 
 import Link from 'next/link';
 import { MapPin, Clock, TrendingUp, Phone, Flame } from 'lucide-react';
-import { cn, formatBudget, formatStatus, statusColor, timeAgo, isColdLead, scoreColor, daysSince } from '@/lib/utils';
+import { cn, formatBudget, formatStatus, statusColor, timeAgo, isColdLead, scoreColor, daysSince, displayStatus } from '@/lib/utils';
 import type { Lead } from '@/types';
 
 interface LeadCardProps {
@@ -49,9 +49,9 @@ export function LeadCard({ lead, compact = false }: LeadCardProps) {
           {/* Status badge */}
           <span className={cn(
             'shrink-0 text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap',
-            statusColor(lead.status)
+            statusColor(displayStatus(lead))
           )}>
-            {formatStatus(lead.status)}
+            {formatStatus(displayStatus(lead))}
           </span>
         </div>
 

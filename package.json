@@ -1,0 +1,12 @@
+{
+  "name": "mira-platform",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build:shared": "npm run build --workspace=@mira/shared-types",
+    "postinstall": "npm run build:shared"
+  }
+}

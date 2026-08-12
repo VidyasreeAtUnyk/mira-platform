@@ -5,6 +5,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { formatDistanceToNow, differenceInDays, parseISO } from 'date-fns';
+import { STAGE_TO_CRM_STATUS, type Lead } from '@mira/shared-types';
 
 /** Merge Tailwind classes safely */
 export function cn(...inputs: ClassValue[]) {
@@ -49,6 +50,15 @@ export function timeAgo(dateString: string | null): string {
 /** Capitalize first letter */
 export function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * Post-merge leads may not carry the legacy `status` column (lead-agent
+ * writes `stage` natively) -- fall back to deriving a display status from
+ * `stage` via the shared mapping rather than showing a blank badge.
+ */
+export function displayStatus(lead: Pick<Lead, 'status' | 'stage'>): string {
+  return lead.status ?? STAGE_TO_CRM_STATUS[lead.stage];
 }
 
 /** Format lead status for display */

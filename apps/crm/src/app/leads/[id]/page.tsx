@@ -22,6 +22,7 @@ import {
   scoreColor,
   whatsappLink,
   cn,
+  displayStatus,
 } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import type { Lead, Interaction, AISuggestion, DLDPriceIndex } from '@/types';
@@ -70,8 +71,8 @@ export default async function LeadProfilePage({ params }: { params: Promise<{ id
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
               <h1 className="text-xl font-bold truncate">{lead.name}</h1>
-              <span className={cn('shrink-0 text-xs font-medium px-2 py-1 rounded-full', statusColor(lead.status))}>
-                {formatStatus(lead.status)}
+              <span className={cn('shrink-0 text-xs font-medium px-2 py-1 rounded-full', statusColor(displayStatus(lead)))}>
+                {formatStatus(displayStatus(lead))}
               </span>
             </div>
             <p className="text-sm text-muted-foreground mt-0.5">

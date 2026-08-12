@@ -20,6 +20,10 @@ out/
 # build output
 build/
 dist/
+# ...except compiled shared packages -- consumed directly by both apps'
+# toolchains (Next.js bundler + tsx/NodeNext), so the compiled output is
+# committed rather than requiring every consumer to run a build step first.
+!packages/*/dist/
 *.tsbuildinfo
 next-env.d.ts
 
