@@ -21,8 +21,14 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files -- .env.example is intentionally NOT ignored (see below): it's
+# documentation with no real values, referenced by name from src/app/error.tsx.
+# Diverges from apps/crm's blanket `.env*` pattern on purpose, matching
+# apps/lead-agent's convention instead -- CLAUDE.md says no credentials get
+# committed, not that the example file documenting which env vars exist can't be.
+.env
+.env.local
+.env.*.local
 
 # vercel
 .vercel

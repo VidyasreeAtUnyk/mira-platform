@@ -20,6 +20,19 @@ import { Pool, types } from "pg";
 // risking a string-concatenation bug at some future call site.
 types.setTypeParser(types.builtins.NUMERIC, (val) => (val === null ? null : parseFloat(val)));
 
+// pg also returns `timestamptz`/`timestamp` columns (last_contacted_at,
+// next_followup_at, created_at, updated_at, locked_at) as JS `Date` objects
+// by default -- but every shared row type (@mira/shared-types' `Lead`,
+// `Agent`, etc.) declares these fields as ISO `string`, and src/lib/utils.ts'
+// `timeAgo()` calls date-fns' `parseISO()` on them, which throws on a `Date`
+// input. Normalize to ISO strings at the driver boundary so this app's data
+// actually matches the shared contract it imports types from, instead of
+// silently diverging (found by actually running this against seeded data,
+// not by typechecking -- `pg`'s types aren't precise enough to catch this
+// statically).
+types.setTypeParser(types.builtins.TIMESTAMPTZ, (val) => (val === null ? null : new Date(val).toISOString()));
+types.setTypeParser(types.builtins.TIMESTAMP, (val) => (val === null ? null : new Date(val).toISOString()));
+
 export const DEFAULT_DATABASE_URL = "postgres://localhost:5432/mira_dev";
 
 let pool: Pool | null = null;
