@@ -68,8 +68,8 @@ export async function seedDatabase(db: Pool): Promise<SeedIds> {
 
   async function insertLead(name: string, phone: string, agentId: string, stage: string): Promise<string> {
     const r = await db.query<{ id: string }>(
-      `INSERT INTO leads (agent_id, name, phone, source, segment, stage, do_not_contact)
-       VALUES ($1, $2, $3, 'referral', 'client', $4, false) RETURNING id`,
+      `INSERT INTO leads (agent_id, name, phone, source, segment, stage, lead_type, do_not_contact)
+       VALUES ($1, $2, $3, 'referral', 'client', $4, 'buyer', false) RETURNING id`,
       [agentId, name, phone, stage],
     );
     return r.rows[0].id;

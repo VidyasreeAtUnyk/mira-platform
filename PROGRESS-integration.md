@@ -162,10 +162,91 @@ for a human rather than silently dropping it. Not resubmitting the
 `phase0-complete` tag push attempt this run since it's already present on
 the remote (see "Blockers" below, unchanged).
 
+## Human verification pass -- 2026-08-13, local machine, real Postgres 17
+
+The prior automated passes explicitly skipped running the apps together
+against one shared database (see "Notes / decisions made" below -- cost
+of installing 6 apps' worth of dependencies and spinning up Postgres per
+app in an ephemeral sandbox). Did exactly that by hand this pass: `npm
+install` at the repo root on `staging`, one Postgres 17 database
+(`mira_staging_dev`) with every migration applied in sequence (CRM's
+`001`-`005`, then `shared-db`'s `001`-`004`), then ran each app for real.
+
+**Confirmed genuinely working, not just typechecked:**
+- `apps/dashboard` -- live against seeded data, role switcher, stats,
+  follow-ups list.
+- `apps/comms-hub` -- notification tiers, draft-and-hold verified in the
+  UI (no code path reaches a real send), RBAC-narrowed thread count shown
+  live ("7 of 7 total threads visible").
+- `apps/social-assistant` -- real `BRAND-KIT.md` taglines rendering,
+  draft vs. pending-approval workflow, co-branded vs. own-brand
+  distinction.
+- `apps/trackers` -- real goals/streaks/progress-to-target once correctly
+  seeded (see bug below).
+- `apps/pipeline` -- kanban board with real seeded transactions across
+  every stage, after fixing a real bug (below).
+- `apps/inventory` -- no web UI (CLI/test-only by design, confirmed
+  against its own `package.json`). 18/23 unit tests pass against a real
+  scratch Postgres; the other 5 fail on a real bug (below).
+
+**Three real bugs found by actually running the merged tree together --
+exactly the class of issue the skipped combined-test pass was meant to
+catch:**
+
+1. **Fixed this pass**: `apps/pipeline/src/scripts/seed.ts`'s
+   `insertLead()` never set `lead_type`, which is `NOT NULL` with a check
+   constraint (`buyer`/`seller`/`tenant`/`landlord`) on the shared `leads`
+   table. Every seed attempt failed outright. Fixed by setting `'buyer'`
+   (these leads are explicitly buyer-side, moving toward a transaction --
+   see the seed script's own comment above `insertLead`). Verified: seed
+   now succeeds, kanban board renders all 4 seeded deals correctly.
+2. **Found, not fixed**: the same seed script's reset step --
+   `TRUNCATE audit_log, proposals, ai_suggestions, interactions,
+   engagement_events, property_price_history, properties, leads, agents
+   CASCADE` -- destroys shared tables (`agents`, `leads`, `properties`) it
+   doesn't own. The script's own comment above the line warns "never
+   point it at a shared/production database" -- but nothing *enforces*
+   that, and running pipeline's seed after trackers' seed (both pointed
+   at `mira_staging_dev`, the only sensible thing to do when testing
+   modules together) silently wiped the agent trackers had just created.
+   Symptom looked like a broken login/auth flow in `apps/trackers`; root
+   cause was pipeline's seed script, not trackers. `apps/inventory` and
+   `apps/trackers`'s own seed/reset scripts were checked and correctly
+   scope their `TRUNCATE`s to tables they own -- this is specific to
+   pipeline.
+3. **Found, not fixed**: `apps/inventory`'s test fixtures
+   (`src/tests/matching.test.ts`) and `src/db/seed.ts` insert into the
+   shared `leads` table without setting `agent_id`, which is also `NOT
+   NULL`. Same root cause as bug 1 (a module-local view of `leads`'
+   required columns that doesn't match the table's actual constraints),
+   different column. 5 of inventory's 23 unit tests fail on this against
+   a real database (they pass against nothing, i.e. were apparently never
+   run against a schema with this constraint enforced before now).
+
+**Recommend as a follow-up, not guessed at here**: a single shared
+test-fixture/seed helper for creating a valid `leads` row (or at minimum
+a documented list of its `NOT NULL` columns), so individual modules stop
+each re-deriving an incomplete view of a table they don't own. Also worth
+scoping every seed script's `TRUNCATE`/reset step to tables that module
+actually owns, given bug 2 above -- `apps/pipeline` is the only offender
+found, but the same audit should probably cover any future module too.
+
+This pass does not change `Status` -- the dashboard cross-module wiring
+and RBAC gap above are still the real blocker to calling this "done", and
+these three bugs don't block that decision either way. Recorded here so
+whoever picks up the dashboard-wiring follow-up (or anyone else touching
+`apps/pipeline` or `apps/inventory`) doesn't rediscover the same thing
+from scratch.
+
 ## Blockers / needs human input
 
 - See "Needs a product decision" above -- dashboard/notification-tier
   unification and the `AgentRole` vs. SPEC.md 6-role RBAC gap.
+- See "Human verification pass" above -- `apps/pipeline`'s seed script
+  destructively truncates shared tables (bug 2) and `apps/inventory`'s
+  test fixtures/seed miss a required `leads.agent_id` (bug 3). Neither
+  fixed yet; bug 1 (pipeline's missing `lead_type`) is fixed and
+  committed.
 - (Inherited, not new to this pass) `PROGRESS-phase0.md` notes the
   `phase0-complete` git tag failed to push at least once mid-build due to
   sandbox credential scoping (branch pushes only, no tag-ref/API tag
