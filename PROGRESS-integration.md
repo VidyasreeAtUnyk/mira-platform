@@ -1,10 +1,88 @@
 # Progress — integration
 
-Status: needs-human-review
-<!-- Not "done" -- merges are clean and pushed, but one cross-module seam
-     (dashboard not reading the newer modules) is a real product-scope
-     decision, not something this pass should guess at. See "Needs a
-     product decision" below. -->
+Status: in-progress
+<!-- Was "needs-human-review" -- the two blocking product decisions (RBAC
+     model, notification-tier unification) are now made and implemented,
+     see "Product decisions resolved" below. Not "done" yet: dashboard's
+     Review Queue now merges proposals/ai_suggestions/social_posts, but
+     trackers/pipeline/inventory/comms-hub still have no presence on the
+     dashboard beyond that (no goals widget, no pipeline summary, etc.) --
+     that's real remaining implementation work, not a blocked decision. -->
+
+## Product decisions resolved (2026-08-13, human + Claude working session)
+
+Both items from "Needs a product decision" below are now decided and
+implemented on this branch (commit `0e4ea3b`), not left for a future pass:
+
+- **RBAC**: `AgentRole` in `packages/shared-types` is now SPEC.md's 6-role
+  table directly (`owner_coo`/`senior_agent`/`junior_agent`/
+  `marketing_social`/`admin_ops`/`finance`), replacing the old 3-value
+  seniority enum. Every real RLS policy and app-code check that depended
+  on the old "manager or admin = unrestricted" pattern was updated to
+  `owner_coo` (the only SPEC.md role with unrestricted access -- see
+  `apps/crm/supabase/migrations/006_rbac_roles.sql`'s header for the full
+  reasoning). `apps/dashboard`'s `DashboardRole` and `apps/comms-hub`'s
+  `CommsRole` -- the two independent implementations that had already
+  converged on this exact shape -- now both import the shared type instead
+  of each defining it locally.
+- **Notification tiers**: `NotificationTier` (`urgent`/`today`/`fyi`) is
+  now shared too, promoted from `apps/comms-hub`'s local concept. Only the
+  type + display labels + sort order are shared -- per-type tier
+  *computation* stays local to whoever's aggregating (dashboard's
+  `queries.ts` has its own heuristics for proposals/suggestions/social
+  posts, comms-hub keeps its own `computeTier()`), matching how comms-hub's
+  own heuristic was already local business logic, not a shared algorithm.
+- **Dashboard now actually reads other modules**: `getReviewQueue()`
+  (previously defined but never called) merges `proposals` +
+  `ai_suggestions` (Phase 0) with `social_posts` where
+  `status = 'pending_approval'` (apps/social-assistant) into one
+  tiered, sorted list, replacing the old "Agent Core -- not built yet"
+  placeholder. That placeholder conflated two different things -- "no
+  automated suggestions exist yet" (still true, Agent Core isn't built)
+  and "nothing is waiting for review" (not true -- real drafted content
+  already exists) -- the new section is honest about which of those it is.
+
+Verified against a real, fully-migrated local Postgres, not just
+typechecked: recreated `mira_staging_dev` from scratch, applied all 11
+migrations in sequence (CRM 001-006, shared-db 001-004, trackers 002) with
+zero errors, reseeded pipeline then trackers, and ran dashboard/trackers/
+comms-hub live. Caught one real bug this way that typecheck alone would
+have missed: migration 006's data remap originally ran *before* dropping
+the old constraint, so it violated its own target state on first real
+apply -- fixed by reordering (drop constraint -> remap data -> add new
+constraint). Screenshotted the Review Queue with three real items (one
+from each source table) rendering correctly, tiered and sorted as
+designed, and confirmed the role switcher still narrows nav correctly for
+all 6 roles.
+
+Explicitly not attempted here: `apps/comms-hub`'s pending message drafts
+are not in the merged queue. That app has no live database connection
+anywhere in this build -- it reads/writes in-memory fixture data only
+(see its migration file's header) -- so there's genuinely nothing to
+query yet. Wiring that in requires giving comms-hub a real Postgres-backed
+store first; that's comms-hub infrastructure work, not a dashboard query
+gap, and out of scope for this pass.
+
+## What's still open (real work, not a blocked decision anymore)
+
+- Trackers, pipeline, and inventory have no presence on the dashboard
+  beyond the review queue -- no goals-progress widget, no pipeline deal
+  summary, no MOU-expiry/compliance alerts. Each would need its own
+  dashboard query + UI section; none is blocked on a product decision
+  anymore, just build time.
+- Cross-app navigation still doesn't exist -- the dashboard's nav items
+  for the other 5 modules are still `status: "planned"` (see
+  `apps/dashboard/src/lib/roles.ts`'s `NavItem` comment) because each
+  module is a separate Next.js deployment on its own port/origin with no
+  routing gateway or multi-zone setup connecting them. That's a
+  deployment-architecture decision, tracked separately from the RBAC/
+  tier decisions this pass resolved.
+- `apps/social-assistant`'s narrower `'founder'`/`'marketing'`/`'other'`
+  `ViewerRole` stand-in was deliberately left as-is (not folded into the
+  new shared `AgentRole`) -- lower value than the dashboard/comms-hub
+  unification (only one implementation, not two independently-converged
+  ones) and would touch 8 call sites for a cosmetic-only cleanup. Fine to
+  revisit later, not blocking anything.
 
 ## Done
 
