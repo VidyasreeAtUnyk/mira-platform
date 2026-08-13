@@ -8,6 +8,11 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // Next.js Multi-Zones: served under /comms by the root zone
+  // (apps/dashboard) -- see apps/pipeline/next.config.ts's comment for the
+  // full explanation, same setup here. (Path is /comms, matching
+  // apps/dashboard/src/lib/roles.ts's existing ModuleKey "comms".)
+  basePath: '/comms',
   async headers() {
     return [
       {

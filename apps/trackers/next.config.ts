@@ -5,6 +5,10 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // Next.js Multi-Zones: served under /trackers by the root zone
+  // (apps/dashboard) -- see apps/pipeline/next.config.ts's comment for the
+  // full explanation, same setup here.
+  basePath: '/trackers',
   async headers() {
     return [
       {

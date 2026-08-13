@@ -9,6 +9,13 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // Next.js Multi-Zones: this app is served under /pipeline by the root
+  // zone (apps/dashboard), which proxies matching requests here via
+  // rewrites in its own next.config.ts. basePath makes every internal
+  // Link/asset reference in this app resolve under that prefix
+  // automatically -- see PROGRESS-integration.md for the cross-app
+  // navigation decision writeup.
+  basePath: '/pipeline',
   async headers() {
     return [
       {

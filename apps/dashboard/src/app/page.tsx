@@ -98,22 +98,36 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
           <RoleSwitcher current={role} />
 
           <nav className="flex flex-wrap gap-1.5">
-            {nav.map((item) => (
-              <span
-                key={item.key}
-                className={cn(
-                  "rounded-full border px-2.5 py-1 text-xs font-medium",
-                  item.key === "today"
-                    ? "border-primary/30 bg-primary/10 text-primary"
-                    : "border-border bg-muted text-muted-foreground"
-                )}
-              >
-                {item.label}
-                {item.status === "planned" && (
-                  <span className="ml-1 text-[10px] opacity-70">(soon)</span>
-                )}
-              </span>
-            ))}
+            {nav.map((item) => {
+              const pillClass = cn(
+                "rounded-full border px-2.5 py-1 text-xs font-medium",
+                item.key === "today"
+                  ? "border-primary/30 bg-primary/10 text-primary"
+                  : "border-border bg-muted text-muted-foreground"
+              );
+              // "live" items with an href are a different app entirely (Next.js
+              // Multi-Zones -- see next.config.ts's rewrites), not a route in
+              // this app, so a plain <a> is correct here, not next/link's Link.
+              if (item.status === "live" && item.href && item.key !== "today") {
+                return (
+                  <a
+                    key={item.key}
+                    href={item.href}
+                    className={cn(pillClass, "transition-colors hover:bg-accent")}
+                  >
+                    {item.label}
+                  </a>
+                );
+              }
+              return (
+                <span key={item.key} className={pillClass}>
+                  {item.label}
+                  {item.status === "planned" && (
+                    <span className="ml-1 text-[10px] opacity-70">(soon)</span>
+                  )}
+                </span>
+              );
+            })}
           </nav>
 
           {founderNote && (

@@ -42,24 +42,25 @@ export interface NavItem {
   key: ModuleKey;
   label: string;
   /**
-   * "planned" here means "no working link exists yet from this shell to
-   * that module" -- the apps themselves now exist and are independently
-   * verified (see PROGRESS-integration.md's human verification pass), but
-   * they're separate Next.js deployments on separate ports/origins with no
-   * routing gateway or multi-zone setup connecting them yet. That's a
-   * deployment-architecture decision, not something this file should paper
-   * over with a link to nowhere. Flip to "live" once that's actually built.
+   * RESOLVED for pipeline/social/trackers/comms (see PROGRESS-integration.md):
+   * apps/dashboard is now the Next.js Multi-Zones root, proxying each of
+   * those paths to that module's own independently-deployed app via
+   * rewrites in next.config.ts. `financials` stays "planned" -- there is no
+   * app for it (SPEC.md module 5 was never assigned to a build module, see
+   * MODULES.json), so there is nothing to link to yet, not a routing gap.
    */
   status: "live" | "planned";
+  /** Path to link to when status is "live" -- undefined when "planned" (nothing to link to). */
+  href?: string;
 }
 
 const ALL_NAV_ITEMS: NavItem[] = [
-  { key: "today", label: "Today", status: "live" },
-  { key: "pipeline", label: "Pipeline & Leads", status: "planned" },
+  { key: "today", label: "Today", status: "live", href: "/" },
+  { key: "pipeline", label: "Pipeline & Leads", status: "live", href: "/pipeline" },
   { key: "financials", label: "Financials", status: "planned" },
-  { key: "social", label: "Social & Marketing", status: "planned" },
-  { key: "trackers", label: "Trackers", status: "planned" },
-  { key: "comms", label: "Comms Hub", status: "planned" },
+  { key: "social", label: "Social & Marketing", status: "live", href: "/social" },
+  { key: "trackers", label: "Trackers", status: "live", href: "/trackers" },
+  { key: "comms", label: "Comms Hub", status: "live", href: "/comms" },
 ];
 
 /** Direct translation of SPEC.md's RBAC "Sees" column. */

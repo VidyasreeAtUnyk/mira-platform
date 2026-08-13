@@ -8,6 +8,12 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // Next.js Multi-Zones: served under /social by the root zone
+  // (apps/dashboard) -- see apps/pipeline/next.config.ts's comment for the
+  // full explanation, same setup here. (Path is /social, not
+  // /social-assistant, to match apps/dashboard/src/lib/roles.ts's existing
+  // ModuleKey "social".)
+  basePath: '/social',
   async headers() {
     return [
       {
