@@ -8,6 +8,7 @@ import { Plus, Target } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
 import { GoalProgressCard } from "@/components/goals/goal-progress-card";
+import { IndividualGoalsList } from "@/components/goals/individual-goals-list";
 import { getCurrentAgent } from "@/lib/current-agent";
 import { db } from "@/lib/db";
 import { getGoalProgressBatch, listAgents, listVisibleGoals } from "@/lib/goals";
@@ -53,15 +54,7 @@ export default async function HomePage() {
           {isManagerLike ? "Individual goals (all agents)" : "My goals"}
         </h2>
         {individualProgress.length > 0 ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {individualProgress.map((p) => (
-              <GoalProgressCard
-                key={p.goal.id}
-                progress={p}
-                ownerName={isManagerLike && p.goal.agent_id ? ownerNames[p.goal.agent_id] : undefined}
-              />
-            ))}
-          </div>
+          <IndividualGoalsList progress={individualProgress} ownerNames={ownerNames} rankByPerformance={isManagerLike} />
         ) : (
           <EmptyState />
         )}

@@ -7,10 +7,12 @@ import { ProgressBar } from "@/components/goals/progress-bar";
 import { getCurrentAgent } from "@/lib/current-agent";
 import { db } from "@/lib/db";
 import { canEditGoal, canLogProgress, getGoal, getGoalProgress, listProgressEntries, ForbiddenError, listAgents } from "@/lib/goals";
+import { computeForecast } from "@/lib/forecast";
 import { formatDate, formatMetricLabel, formatNumber } from "@/lib/utils";
 import { EditGoalForm } from "./edit-goal-form";
 import { LogProgressForm } from "./log-progress-form";
 import { EntryHistory } from "./entry-history";
+import { ForecastChart } from "@/components/goals/forecast-chart";
 
 export const revalidate = 0;
 
@@ -53,6 +55,7 @@ export default async function GoalDetailPage({ params }: { params: Promise<{ id:
 
   const editable = canEditGoal(agent, goal);
   const loggable = canLogProgress(agent, goal);
+  const forecast = computeForecast(goal, entries, progress.totalLogged);
 
   return (
     <AppShell agent={agent}>
@@ -95,6 +98,29 @@ export default async function GoalDetailPage({ params }: { params: Promise<{ id:
                 <Flame className="size-3.5" />
                 {progress.currentStreakDays}-day streak
               </span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Forecast</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className={`text-sm ${forecast.onTrack ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
+            {forecast.note}
+          </p>
+          {forecast.series.some((p) => p.cumulative > 0) && (
+            <div className="text-muted-foreground">
+              <ForecastChart series={forecast.series} target={goal.target_value} projectedTotal={forecast.projectedTotal} />
+            </div>
+          )}
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground pt-1">
+            <span>Day {forecast.daysElapsed} of {forecast.daysTotal}</span>
+            <span>Current pace: {formatNumber(forecast.pacePerDay)} {goal.unit ?? ""}/day</span>
+            {!forecast.onTrack && forecast.daysRemaining > 0 && (
+              <span>Need +{formatNumber(forecast.extraPerDayNeeded)} {goal.unit ?? ""}/day to hit target</span>
             )}
           </div>
         </CardContent>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import type { Agent, GoalPeriodType, GoalScope } from '@mira/shared-types';
 import { GOAL_PERIOD_TYPES, GOAL_SCOPES, RECOMMENDED_GOAL_METRICS } from '@mira/shared-types';
 import { Button } from '@/components/ui/button';
@@ -17,13 +17,14 @@ const initialState: ActionState = {};
 export function GoalForm({ currentAgent, agents }: { currentAgent: Agent; agents: Agent[] }) {
   const [state, formAction, pending] = useActionState(createGoalAction, initialState);
   const isManagerLike = checkIsManagerLike(currentAgent);
+  const [scope, setScope] = useState<GoalScope>('individual');
 
   return (
     <form action={formAction} className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="scope">Scope</Label>
-          <Select id="scope" name="scope" defaultValue="individual">
+          <Select id="scope" name="scope" defaultValue="individual" onChange={(e) => setScope(e.target.value as GoalScope)}>
             {GOAL_SCOPES.map((s: GoalScope) => (
               <option key={s} value={s}>
                 {s === 'individual' ? 'Individual' : 'Team'}
@@ -32,9 +33,9 @@ export function GoalForm({ currentAgent, agents }: { currentAgent: Agent; agents
           </Select>
         </div>
 
-        {isManagerLike && (
+        {isManagerLike && scope === 'individual' ? (
           <div className="space-y-1.5">
-            <Label htmlFor="agent_id">Assign to (individual goals only)</Label>
+            <Label htmlFor="agent_id">Assign to</Label>
             <Select id="agent_id" name="agent_id" defaultValue={currentAgent.id}>
               {agents.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -43,7 +44,14 @@ export function GoalForm({ currentAgent, agents }: { currentAgent: Agent; agents
               ))}
             </Select>
           </div>
-        )}
+        ) : isManagerLike && scope === 'team' ? (
+          <div className="space-y-1.5">
+            <Label>Assign to</Label>
+            <p className="flex h-9 items-center text-sm text-muted-foreground">
+              Team goal — visible and loggable by everyone, no individual owner.
+            </p>
+          </div>
+        ) : null}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
