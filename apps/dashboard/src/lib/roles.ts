@@ -11,44 +11,23 @@
  * `owner_coo` -- swapping it never grants or hides real data, since nothing
  * downstream of this file gates a database query on it.
  *
- * IMPORTANT GAP (flagged in PROGRESS-dashboard.md, not resolved here):
- * `@mira/shared-types`' `AgentRole` (`AGENT_ROLES` in domain.ts) is a
- * 3-value enum (`agent` / `manager` / `admin`) matching the `agents.role`
- * DB column. SPEC.md's RBAC table has 6 roles (Owner/COO, Senior Agent,
- * Junior Agent, Marketing/Social, Admin/Ops, Finance) with materially
- * different "sees" boundaries than 3 generic levels can express (e.g.
- * Marketing/Social has no CRM/financial access at all, which isn't a
- * "seniority" distinction). That's a real product/schema decision --
- * whether `agents.role` grows to 6 values, or a separate
- * `agents.dashboard_role` column is added, or something else -- and
- * per CLAUDE.md's module-boundary rule this module must not fork a
- * competing definition into `packages/shared-types` unilaterally. The
- * `DashboardRole` type below is deliberately local to apps/dashboard and
- * UI-only until a human decides how (or whether) it should become part of
- * the shared contract.
+ * RESOLVED (was flagged here as a gap, see PROGRESS-integration.md for the
+ * full decision writeup): `@mira/shared-types`' `AgentRole` now IS SPEC.md's
+ * 6-role table directly -- the local `DashboardRole` this file used to
+ * define has been deleted in favor of importing the shared type. Two
+ * independent module builds (this file and apps/comms-hub's `CommsRole`)
+ * had already converged on the identical 6-value shape before this was
+ * promoted, which is why the promotion just formalizes an existing
+ * agreement rather than invents a new one.
  */
 
-export const DASHBOARD_ROLES = [
-  "owner_coo",
-  "senior_agent",
-  "junior_agent",
-  "marketing_social",
-  "admin_ops",
-  "finance",
-] as const;
-export type DashboardRole = (typeof DASHBOARD_ROLES)[number];
+import { AGENT_ROLES, AGENT_ROLE_LABELS, type AgentRole } from "@mira/shared-types";
 
-export const ROLE_LABELS: Record<DashboardRole, string> = {
-  owner_coo: "Owner / COO",
-  senior_agent: "Senior Agent",
-  junior_agent: "Junior Agent",
-  marketing_social: "Marketing / Social",
-  admin_ops: "Admin / Ops",
-  finance: "Finance",
-};
+export { AGENT_ROLES, AGENT_ROLE_LABELS as ROLE_LABELS };
+export type DashboardRole = AgentRole;
 
 export function isDashboardRole(value: string | undefined | null): value is DashboardRole {
-  return !!value && (DASHBOARD_ROLES as readonly string[]).includes(value);
+  return !!value && (AGENT_ROLES as readonly string[]).includes(value);
 }
 
 export type ModuleKey =
@@ -62,7 +41,15 @@ export type ModuleKey =
 export interface NavItem {
   key: ModuleKey;
   label: string;
-  /** SPEC.md build phase order -- most of these apps don't exist as routes yet. */
+  /**
+   * "planned" here means "no working link exists yet from this shell to
+   * that module" -- the apps themselves now exist and are independently
+   * verified (see PROGRESS-integration.md's human verification pass), but
+   * they're separate Next.js deployments on separate ports/origins with no
+   * routing gateway or multi-zone setup connecting them yet. That's a
+   * deployment-architecture decision, not something this file should paper
+   * over with a link to nowhere. Flip to "live" once that's actually built.
+   */
   status: "live" | "planned";
 }
 
@@ -75,12 +62,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { key: "comms", label: "Comms Hub", status: "planned" },
 ];
 
-/**
- * Direct translation of SPEC.md's RBAC "Sees" column. Only `today` actually
- * exists as a route right now (the other module worktrees haven't merged),
- * so this currently only affects which nav items *render* on this shell,
- * not which data loads -- see the module gap note above.
- */
+/** Direct translation of SPEC.md's RBAC "Sees" column. */
 const VISIBLE_MODULES: Record<DashboardRole, ModuleKey[]> = {
   owner_coo: ["today", "pipeline", "financials", "social", "trackers", "comms"],
   senior_agent: ["today", "pipeline", "comms"],

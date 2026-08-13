@@ -20,7 +20,7 @@ export default async function HomePage() {
 
   const pool = await db();
   const { individual, team } = await listVisibleGoals(pool, agent);
-  const isManagerLike = agent.role === "manager" || agent.role === "admin";
+  const isManagerLike = agent.role === "owner_coo";
 
   const [individualProgress, teamProgress] = await Promise.all([
     getGoalProgressBatch(pool, individual),

@@ -9,6 +9,7 @@
  * Postgres shape this mirrors.
  */
 export * from '@mira/shared-types';
+import type { AgentRole, NotificationTier } from '@mira/shared-types';
 
 // ============================================================
 // Channels
@@ -31,8 +32,10 @@ export type MessageDirection = (typeof MESSAGE_DIRECTIONS)[number];
 export const MESSAGE_STATUSES = ['draft', 'pending_approval', 'approved', 'held', 'sent'] as const;
 export type MessageStatus = (typeof MESSAGE_STATUSES)[number];
 
-export const NOTIFICATION_TIERS = ['urgent', 'today', 'fyi'] as const;
-export type NotificationTier = (typeof NOTIFICATION_TIERS)[number];
+// NotificationTier / NOTIFICATION_TIERS: promoted into @mira/shared-types
+// (see PROGRESS-integration.md) and already re-exported by `export * from
+// '@mira/shared-types'` above -- no longer redefined here, that would be a
+// duplicate export of the same name.
 
 export const BSP_PROVIDERS = ['interakt', 'wati', 'twilio', 'mock'] as const;
 export type BspProvider = (typeof BSP_PROVIDERS)[number];
@@ -41,29 +44,16 @@ export const EMAIL_PROVIDERS = ['gmail', 'outlook', 'mock'] as const;
 export type EmailProvider = (typeof EMAIL_PROVIDERS)[number];
 
 /**
- * SPEC.md's RBAC table ("Roles (RBAC + ownership)") is richer than
- * @mira/shared-types' `AgentRole` ('agent' | 'manager' | 'admin' -- the
- * Phase 0 CRM auth role only, see packages/shared-db/schema.sql's `agents`
- * table). Comms-hub notification/thread filtering needs the full SPEC
- * table -- Marketing/Social's explicit "No CRM/lead access" note is the one
- * concrete, testable requirement this build targets -- so `CommsRole`
- * exists here as a business-role axis distinct from (not a fork of)
- * AgentRole's CRM-auth-role axis.
- *
- * This is flagged in PROGRESS-comms.md for a human to decide whether
- * CommsRole should be promoted into packages/shared-types (and `agents`
- * given a real role/team model) in the cross-module integration pass --
- * out of scope for this branch, which must not touch packages/*.
+ * RESOLVED (was flagged here for a human decision, see
+ * PROGRESS-integration.md for the full writeup): @mira/shared-types'
+ * `AgentRole` now IS SPEC.md's 6-role table directly -- this module's
+ * `CommsRole` was one of the two independent implementations that
+ * converged on that exact shape, which is why the promotion just
+ * formalizes an existing agreement. Kept as a local alias (not deleted)
+ * so this module's own naming (`Viewer.role: CommsRole`, imports
+ * elsewhere in this app) doesn't need a mechanical rename.
  */
-export const COMMS_ROLES = [
-  'owner_coo',
-  'senior_agent',
-  'junior_agent',
-  'marketing_social',
-  'admin_ops',
-  'finance',
-] as const;
-export type CommsRole = (typeof COMMS_ROLES)[number];
+export type CommsRole = AgentRole;
 
 /** A logged-in user of comms-hub, for RBAC filtering purposes. */
 export interface Viewer {

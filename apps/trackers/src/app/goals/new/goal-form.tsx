@@ -9,13 +9,14 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { createGoalAction, type ActionState } from '../actions';
+import { isManagerLike as checkIsManagerLike } from '@/lib/goals';
 import { todayIso } from '@/lib/utils';
 
 const initialState: ActionState = {};
 
 export function GoalForm({ currentAgent, agents }: { currentAgent: Agent; agents: Agent[] }) {
   const [state, formAction, pending] = useActionState(createGoalAction, initialState);
-  const isManagerLike = currentAgent.role === 'manager' || currentAgent.role === 'admin';
+  const isManagerLike = checkIsManagerLike(currentAgent);
 
   return (
     <form action={formAction} className="space-y-5">

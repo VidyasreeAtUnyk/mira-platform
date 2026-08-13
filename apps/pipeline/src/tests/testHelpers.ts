@@ -102,7 +102,7 @@ export async function assertThrows(fn: () => Promise<unknown>, message: string):
 /** Minimal fixture helpers shared across test files. */
 export async function seedMinimalAgent(db: Pool): Promise<string> {
   const r = await db.query<{ id: string }>(
-    `INSERT INTO agents (name, email, role) VALUES ('Test Agent', 'test-agent-' || uuid_generate_v4() || '@example.com', 'agent') RETURNING id`,
+    `INSERT INTO agents (name, email, role) VALUES ('Test Agent', 'test-agent-' || uuid_generate_v4() || '@example.com', 'junior_agent') RETURNING id`,
   );
   return r.rows[0].id;
 }

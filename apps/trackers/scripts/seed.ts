@@ -45,19 +45,19 @@ async function main() {
   );
 
   const managerResult = await pool.query<{ id: string }>(
-    `insert into agents (name, email, phone, role) values ($1, $2, $3, 'manager') returning id`,
+    `insert into agents (name, email, phone, role) values ($1, $2, $3, 'owner_coo') returning id`,
     ["Sana Malik", "sana.malik@mira.example", "+971501110001"]
   );
   const manager = managerResult.rows[0].id;
 
   const farahResult = await pool.query<{ id: string }>(
-    `insert into agents (name, email, phone, role) values ($1, $2, $3, 'agent') returning id`,
+    `insert into agents (name, email, phone, role) values ($1, $2, $3, 'junior_agent') returning id`,
     ["Farah Hussain", "farah.hussain@mira.example", "+971501110002"]
   );
   const farah = farahResult.rows[0].id;
 
   const omarResult = await pool.query<{ id: string }>(
-    `insert into agents (name, email, phone, role) values ($1, $2, $3, 'agent') returning id`,
+    `insert into agents (name, email, phone, role) values ($1, $2, $3, 'junior_agent') returning id`,
     ["Omar Saeed", "omar.saeed@mira.example", "+971501110003"]
   );
   const omar = omarResult.rows[0].id;

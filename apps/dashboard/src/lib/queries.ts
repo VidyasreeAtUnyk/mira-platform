@@ -14,10 +14,12 @@ import type {
   AISuggestion,
   DashboardStats,
   Lead,
+  NotificationTier,
   Proposal,
+  SocialPost,
   Stage,
 } from "@mira/shared-types";
-import { STAGES } from "@mira/shared-types";
+import { NOTIFICATION_TIER_ORDER, STAGES } from "@mira/shared-types";
 
 /**
  * Mirrors apps/crm's src/app/page.tsx definitions (cold = no contact in 7+
@@ -75,25 +77,82 @@ export async function getColdLeads(limit = 10): Promise<Lead[]> {
   return res.rows;
 }
 
-export interface ReviewQueue {
-  proposals: Proposal[];
-  suggestions: AISuggestion[];
+/**
+ * A tier per item, computed here rather than stored -- neither `proposals`/
+ * `ai_suggestions` (Phase 0) nor `social_posts` (apps/social-assistant) has
+ * a `tier` column, and this pass deliberately didn't add one to avoid more
+ * schema churn (see PROGRESS-integration.md). `NotificationTier` itself
+ * *is* shared (promoted from apps/comms-hub's local concept, same
+ * decision) -- only the per-type heuristic for computing one is local to
+ * whoever's aggregating, same as apps/comms-hub/src/lib/tiers.ts's
+ * computeTier() is local to that module's own notion of urgency.
+ *
+ * Documented v1 heuristics, not a discovered truth -- easy to retune once
+ * real usage data exists (same framing as comms-hub's own tier heuristic).
+ */
+function tierByPendingAge(createdAt: string): NotificationTier {
+  const hoursOld = (Date.now() - new Date(createdAt).getTime()) / 3_600_000;
+  if (hoursOld >= 48) return "urgent";
+  if (hoursOld >= 12) return "today";
+  return "fyi";
 }
+
+function tierBySchedule(scheduledFor: string | null): NotificationTier {
+  if (!scheduledFor) return "today";
+  const hoursUntil = (new Date(scheduledFor).getTime() - Date.now()) / 3_600_000;
+  if (hoursUntil <= 24) return "urgent";
+  if (hoursUntil <= 24 * 3) return "today";
+  return "fyi";
+}
+
+export type ReviewQueueItem =
+  | { kind: "proposal"; tier: NotificationTier; createdAt: string; data: Proposal }
+  | { kind: "suggestion"; tier: NotificationTier; createdAt: string; data: AISuggestion }
+  | { kind: "social_post"; tier: NotificationTier; createdAt: string; data: SocialPost };
 
 /**
  * Everything currently sitting in the review/approval queue (SPEC.md: "Nearly
- * everything routes here at launch"). `proposals` (lead-agent's drafted
- * messages/viewings) and `ai_suggestions` (crm's scoring/upgrade proposals)
- * are kept as two tables per the Phase 0 merge decision -- see
- * packages/shared-db/schema.sql's header comment -- so this reads both.
+ * everything routes here at launch"), merged across every module that has a
+ * draft/pending_approval workflow and sorted urgent-first, then oldest-first
+ * within a tier. `proposals` + `ai_suggestions` (Phase 0, two tables per the
+ * merge decision -- see packages/shared-db/schema.sql's header) and
+ * `social_posts` (apps/social-assistant) are read directly since they're
+ * all in the same shared Postgres database -- no cross-app call needed.
+ *
+ * apps/comms-hub's pending-approval message drafts are NOT included here:
+ * that app has no live database connection anywhere in this build (reads/
+ * writes in-memory fixture data only, see its migration file's header) --
+ * there is nothing yet to query. Wiring that in is a comms-hub
+ * infrastructure change (giving it a real Postgres-backed store), not a
+ * dashboard-side query gap.
  */
-export async function getReviewQueue(): Promise<ReviewQueue> {
+export async function getReviewQueue(): Promise<ReviewQueueItem[]> {
   const db = getDb();
-  const [proposalsRes, suggestionsRes] = await Promise.all([
+  const [proposalsRes, suggestionsRes, socialPostsRes] = await Promise.all([
     db.query<Proposal>(`select * from proposals where status = 'pending' order by created_at asc`),
     db.query<AISuggestion>(`select * from ai_suggestions where status = 'pending' order by created_at asc`),
+    db.query<SocialPost>(`select * from social_posts where status = 'pending_approval' order by created_at asc`),
   ]);
-  return { proposals: proposalsRes.rows, suggestions: suggestionsRes.rows };
+
+  const items: ReviewQueueItem[] = [
+    ...proposalsRes.rows.map(
+      (p): ReviewQueueItem => ({ kind: "proposal", tier: tierByPendingAge(p.created_at), createdAt: p.created_at, data: p })
+    ),
+    ...suggestionsRes.rows.map(
+      (s): ReviewQueueItem => ({ kind: "suggestion", tier: tierByPendingAge(s.created_at), createdAt: s.created_at, data: s })
+    ),
+    ...socialPostsRes.rows.map(
+      (p): ReviewQueueItem => ({ kind: "social_post", tier: tierBySchedule(p.scheduled_for), createdAt: p.created_at, data: p })
+    ),
+  ];
+
+  items.sort((a, b) => {
+    const tierDiff = NOTIFICATION_TIER_ORDER[a.tier] - NOTIFICATION_TIER_ORDER[b.tier];
+    if (tierDiff !== 0) return tierDiff;
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
+
+  return items;
 }
 
 /** Lead counts per funnel stage, in canonical STAGES order, for a pipeline-shape glance. */

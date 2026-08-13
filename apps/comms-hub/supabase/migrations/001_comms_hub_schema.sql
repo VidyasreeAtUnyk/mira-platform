@@ -103,12 +103,15 @@ create index if not exists idx_notifications_thread on notifications(thread_id);
 
 -- ============================================================
 -- RLS (mirrors apps/crm/supabase/migrations/002_rls_policies.sql's
--- get_current_agent_role() pattern; comms-hub's richer CommsRole concept
--- -- see src/types/index.ts -- is NOT modeled at the DB layer here, only
--- application-side in src/lib/rbac.ts. Promoting CommsRole into the shared
--- `agents.role` enum, and mirroring these checks as real RLS policies
--- (rather than just app-layer filtering), is flagged as follow-up work in
--- PROGRESS-comms.md.)
+-- get_current_agent_role() pattern). CommsRole has since been promoted into
+-- the shared `agents.role` enum (see apps/crm/supabase/migrations/
+-- 006_rbac_roles.sql and PROGRESS-integration.md) -- src/types/index.ts now
+-- imports AgentRole from @mira/shared-types instead of defining its own.
+-- Mirroring src/lib/rbac.ts's checks as real RLS policies (rather than just
+-- app-layer filtering) is still follow-up work, since this migration was
+-- never applied to a live project in this build (no Supabase credentials
+-- exist anywhere in this repo) -- the policies below stay simple
+-- (auth.uid() is not null) until a human with real access revisits this.
 -- ============================================================
 alter table message_threads enable row level security;
 alter table messages enable row level security;

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { DASHBOARD_ROLES, ROLE_LABELS, type DashboardRole } from "@/lib/roles";
+import { AGENT_ROLES, ROLE_LABELS, type DashboardRole } from "@/lib/roles";
 
 /**
  * Dev-only "view as role" switcher -- NOT auth, NOT a role picker for a real
@@ -16,7 +16,7 @@ export function RoleSwitcher({ current }: { current: DashboardRole }) {
         Dev preview only -- no auth wired up yet. Viewing as:
       </p>
       <div className="flex flex-wrap gap-1.5">
-        {DASHBOARD_ROLES.map((role) => (
+        {AGENT_ROLES.map((role) => (
           <Link
             key={role}
             href={`/?role=${role}`}

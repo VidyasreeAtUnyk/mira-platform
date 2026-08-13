@@ -12,9 +12,14 @@
  */
 import { Flame, Inbox, Phone, Sparkles, Trophy, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { RoleSwitcher } from "@/components/layout/role-switcher";
-import { getColdLeads, getDashboardStats } from "@/lib/queries";
+import {
+  getColdLeads,
+  getDashboardStats,
+  getLeadNamesByIds,
+  getReviewQueue,
+  type ReviewQueueItem,
+} from "@/lib/queries";
 import { cn, timeAgo, titleCase } from "@/lib/utils";
 import {
   FOUNDER_ONLY_NOTES,
@@ -24,6 +29,7 @@ import {
   type DashboardRole,
 } from "@/lib/roles";
 import type { Lead } from "@mira/shared-types";
+import { NOTIFICATION_TIER_LABELS } from "@mira/shared-types";
 
 // This page reads live rows straight from Postgres on every request (see
 // src/lib/db.ts) -- never cache a stale "Today" briefing.
@@ -39,10 +45,16 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   const params = await searchParams;
   const role: DashboardRole = isDashboardRole(params.role) ? params.role : "owner_coo";
 
-  const [stats, coldLeads] = await Promise.all([
+  const [stats, coldLeads, reviewQueue] = await Promise.all([
     getDashboardStats(),
     getColdLeads(COLD_LEADS_LIMIT),
+    getReviewQueue(),
   ]);
+
+  const reviewQueueLeadIds = reviewQueue
+    .map((item) => (item.kind === "proposal" || item.kind === "suggestion" ? item.data.lead_id : null))
+    .filter((id): id is string => id !== null);
+  const leadNamesById = await getLeadNamesByIds(reviewQueueLeadIds);
 
   const nav = navItemsForRole(role);
   const founderNote = FOUNDER_ONLY_NOTES[role];
@@ -189,25 +201,57 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
           )}
         </section>
 
+        {/* Review queue -- getReviewQueue(), merged across proposals/ai_suggestions
+            (Phase 0) and social_posts (apps/social-assistant). Real pending items
+            that already exist today, not Agent Core's future automated
+            suggestions -- see the note below the heading. */}
+        <section className="mb-8">
+          <div className="mb-3 flex items-center gap-2">
+            <Inbox className="h-4 w-4 text-primary" />
+            <h2 className="text-base font-semibold">Review Queue</h2>
+            <Badge variant={reviewQueue.length > 0 ? "primary" : "default"}>{reviewQueue.length}</Badge>
+          </div>
+          <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
+            Drafted, awaiting your review -- draft-and-hold, nothing here has gone out on its own.{" "}
+            <span className="italic">
+              Not the same thing as Agent Core&apos;s future automated suggestions (SPEC.md phase 1,
+              not built yet) -- this is real content other modules have already drafted.
+            </span>
+          </p>
+
+          {reviewQueue.length === 0 ? (
+            <EmptyState icon={Inbox} title="Nothing waiting for review" subtitle="The queue is empty." />
+          ) : (
+            <ul className="space-y-2.5">
+              {reviewQueue.map((item) => (
+                <ReviewQueueRow
+                  key={`${item.kind}-${item.data.id}`}
+                  item={item}
+                  leadName={
+                    item.kind !== "social_post" && item.data.lead_id
+                      ? leadNamesById.get(item.data.lead_id)
+                      : undefined
+                  }
+                />
+              ))}
+            </ul>
+          )}
+        </section>
+
         {/* Agent Core placeholder -- SPEC.md phase 1, not built yet. Not a live feed. */}
         <section className="rounded-xl border border-dashed border-border bg-muted/40 p-5">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Sparkles className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">Agent suggestions &amp; review queue</h2>
+            <h2 className="text-sm font-semibold">Agent Core reasoning loop</h2>
             <Badge variant="outline">Not built yet</Badge>
           </div>
           <p className="text-xs leading-relaxed text-muted-foreground">
             SPEC.md&apos;s Agent Core (build phase 1: scheduled/event-triggered reasoning loop, budget
-            governor, escalation rules) is what would populate this section -- prioritized suggestions
-            and judgment calls routed here for approval. That module hasn&apos;t been built yet, so this
-            is a placeholder, not a live feed. No agent-generated content is faked on this page.
+            governor, escalation rules) is what would generate new suggestions automatically and decide
+            what to prioritize. The Review Queue above shows what already exists today (drafted by
+            individual modules); this section is about the reasoning layer on top of it, which hasn&apos;t
+            been built yet. No agent-generated content is faked on this page.
           </p>
-          <div className="mt-3">
-            <Button disabled className="text-xs" title="Review queue opens once Agent Core (phase 1) ships">
-              <Inbox className="mr-1.5 h-3.5 w-3.5" />
-              Open review queue (coming soon)
-            </Button>
-          </div>
         </section>
       </div>
     </div>
@@ -268,6 +312,57 @@ function LeadRow({ lead, highlight }: { lead: Lead; highlight: "followup" | "col
           <span>{timeAgo(lead.last_contacted_at)}</span>
         )}
       </div>
+    </li>
+  );
+}
+
+const TIER_BADGE_VARIANT: Record<string, "destructive" | "warning" | "outline"> = {
+  urgent: "destructive",
+  today: "warning",
+  fyi: "outline",
+};
+
+/**
+ * One row in the merged review queue -- renders differently per item kind
+ * since a proposal, an AI suggestion, and a social post don't share a
+ * display shape. Each links out to the module that actually owns the
+ * approve/hold action for that item (once cross-app routing exists -- see
+ * src/lib/roles.ts's NavItem.status note) rather than duplicating that UI
+ * here; for now this is a read-only summary.
+ */
+function ReviewQueueRow({ item, leadName }: { item: ReviewQueueItem; leadName?: string }) {
+  const tierLabel = NOTIFICATION_TIER_LABELS[item.tier];
+  const tierVariant = TIER_BADGE_VARIANT[item.tier];
+
+  let title: string;
+  let subtitle: string;
+  let sourceLabel: string;
+
+  if (item.kind === "proposal") {
+    title = leadName ? `${titleCase(item.data.type)} for ${leadName}` : titleCase(item.data.type);
+    subtitle = item.data.content;
+    sourceLabel = "Lead-agent proposal";
+  } else if (item.kind === "suggestion") {
+    title = leadName ? `${titleCase(item.data.suggestion_type)} for ${leadName}` : titleCase(item.data.suggestion_type);
+    subtitle = item.data.content ?? "";
+    sourceLabel = "CRM suggestion";
+  } else {
+    title = `${titleCase(item.data.kind)} -- ${item.data.platform}`;
+    subtitle = item.data.caption;
+    sourceLabel = item.data.brand_mode === "co_branded" ? `Social post -- co-branded (${item.data.developer_partner_name})` : "Social post -- own brand";
+  }
+
+  return (
+    <li className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-border bg-card px-3.5 py-3 shadow-sm">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={tierVariant}>{tierLabel}</Badge>
+          <span className="truncate text-sm font-medium">{title}</span>
+        </div>
+        <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{subtitle}</p>
+        <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">{sourceLabel}</p>
+      </div>
+      <div className="shrink-0 text-right text-xs text-muted-foreground">{timeAgo(item.createdAt)}</div>
     </li>
   );
 }

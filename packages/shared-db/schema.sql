@@ -40,7 +40,13 @@ create table if not exists agents (
   name text not null,
   email text unique not null,
   phone text,
-  role text not null default 'agent' check (role in ('agent', 'manager', 'admin')),
+  -- SPEC.md's 6-role RBAC table. Defaults to the least-privileged role
+  -- (principle of least privilege for a row created without an explicit
+  -- role) rather than the old 3-value 'agent' default -- see migration 006
+  -- and PROGRESS-integration.md for the full rename/decision writeup.
+  role text not null default 'junior_agent' check (
+    role in ('owner_coo', 'senior_agent', 'junior_agent', 'marketing_social', 'admin_ops', 'finance')
+  ),
   created_at timestamptz not null default now()
 );
 

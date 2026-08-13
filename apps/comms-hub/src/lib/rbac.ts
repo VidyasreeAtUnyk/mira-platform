@@ -1,4 +1,4 @@
-import type { CommsRole, MessageThread, Notification, Viewer } from '@/types';
+import { AGENT_ROLE_LABELS, type MessageThread, type Notification, type Viewer } from '@/types';
 
 /**
  * Comms-hub visibility rules, derived from SPEC.md's "Roles (RBAC +
@@ -79,11 +79,5 @@ export function filterNotificationsForViewer(
   });
 }
 
-export const COMMS_ROLE_LABELS: Record<CommsRole, string> = {
-  owner_coo: 'Owner / COO',
-  senior_agent: 'Senior Agent',
-  junior_agent: 'Junior Agent',
-  marketing_social: 'Marketing / Social',
-  admin_ops: 'Admin / Ops',
-  finance: 'Finance',
-};
+/** Was a locally-duplicated literal; now just the shared labels under this module's existing export name. */
+export const COMMS_ROLE_LABELS = AGENT_ROLE_LABELS;

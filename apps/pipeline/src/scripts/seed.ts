@@ -57,7 +57,7 @@ export async function seedDatabase(db: Pool): Promise<SeedIds> {
 
   async function insertAgent(name: string, email: string): Promise<string> {
     const r = await db.query<{ id: string }>(
-      `INSERT INTO agents (name, email, role) VALUES ($1, $2, 'agent') RETURNING id`,
+      `INSERT INTO agents (name, email, role) VALUES ($1, $2, 'junior_agent') RETURNING id`,
       [name, email],
     );
     return r.rows[0].id;

@@ -38,8 +38,14 @@ export class ForbiddenError extends Error {
   }
 }
 
+/**
+ * "Manager-like" under the old 3-value role model meant 'manager' or
+ * 'admin' -- both of which had unrestricted see/edit-everything access.
+ * Under SPEC.md's 6-role model (see PROGRESS-integration.md) that access
+ * level maps to exactly one role, owner_coo, not the narrower senior_agent.
+ */
 export function isManagerLike(agent: Agent): boolean {
-  return agent.role === "manager" || agent.role === "admin";
+  return agent.role === "owner_coo";
 }
 
 export function canViewGoal(agent: Agent, goal: Goal): boolean {

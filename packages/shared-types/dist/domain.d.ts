@@ -1,6 +1,17 @@
 import type { Stage, Segment, LegacyCrmStatus } from "./stage.js";
-export declare const AGENT_ROLES: readonly ["agent", "manager", "admin"];
+/**
+ * SPEC.md's RBAC table, 6 roles. Replaces an earlier 3-value seniority-level
+ * enum (`agent`/`manager`/`admin`) that nothing in the codebase depended on
+ * for real behavior -- two independent module builds (apps/dashboard's
+ * `DashboardRole`, apps/comms-hub's `CommsRole`) each arrived at this exact
+ * 6-value shape from SPEC.md's table without seeing each other's work,
+ * which is why this is a single shared enum rather than two axes (a small
+ * team doesn't need "seniority" and "access boundary" as separate concepts
+ * -- see PROGRESS-integration.md for the full decision writeup).
+ */
+export declare const AGENT_ROLES: readonly ["owner_coo", "senior_agent", "junior_agent", "marketing_social", "admin_ops", "finance"];
 export type AgentRole = (typeof AGENT_ROLES)[number];
+export declare const AGENT_ROLE_LABELS: Record<AgentRole, string>;
 export declare const LEAD_TYPES: readonly ["buyer", "seller", "tenant", "landlord"];
 export type LeadType = (typeof LEAD_TYPES)[number];
 export declare const PROPERTY_TYPES: readonly ["apartment", "villa", "townhouse", "commercial", "land"];
@@ -357,3 +368,8 @@ export interface SocialPostMetric {
     source: "platform_api" | "manual_entry";
     recorded_at: string;
 }
+export declare const NOTIFICATION_TIERS: readonly ["urgent", "today", "fyi"];
+export type NotificationTier = (typeof NOTIFICATION_TIERS)[number];
+export declare const NOTIFICATION_TIER_LABELS: Record<NotificationTier, string>;
+/** Lower = higher priority. Sort ascending for urgent-first ordering. */
+export declare const NOTIFICATION_TIER_ORDER: Record<NotificationTier, number>;

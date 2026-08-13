@@ -4,8 +4,34 @@ import type { Stage, Segment, LegacyCrmStatus } from "./stage.js";
 // Shared enums
 // ============================================================
 
-export const AGENT_ROLES = ["agent", "manager", "admin"] as const;
+/**
+ * SPEC.md's RBAC table, 6 roles. Replaces an earlier 3-value seniority-level
+ * enum (`agent`/`manager`/`admin`) that nothing in the codebase depended on
+ * for real behavior -- two independent module builds (apps/dashboard's
+ * `DashboardRole`, apps/comms-hub's `CommsRole`) each arrived at this exact
+ * 6-value shape from SPEC.md's table without seeing each other's work,
+ * which is why this is a single shared enum rather than two axes (a small
+ * team doesn't need "seniority" and "access boundary" as separate concepts
+ * -- see PROGRESS-integration.md for the full decision writeup).
+ */
+export const AGENT_ROLES = [
+  "owner_coo",
+  "senior_agent",
+  "junior_agent",
+  "marketing_social",
+  "admin_ops",
+  "finance",
+] as const;
 export type AgentRole = (typeof AGENT_ROLES)[number];
+
+export const AGENT_ROLE_LABELS: Record<AgentRole, string> = {
+  owner_coo: "Owner / COO",
+  senior_agent: "Senior Agent",
+  junior_agent: "Junior Agent",
+  marketing_social: "Marketing / Social",
+  admin_ops: "Admin / Ops",
+  finance: "Finance",
+};
 
 export const LEAD_TYPES = ["buyer", "seller", "tenant", "landlord"] as const;
 export type LeadType = (typeof LEAD_TYPES)[number];
@@ -484,3 +510,32 @@ export interface SocialPostMetric {
   source: "platform_api" | "manual_entry";
   recorded_at: string;
 }
+
+// ============================================================
+// Notification priority tiers (SPEC.md module 6: "Notification center with
+// priority tiers (urgent / today / fyi)"). Promoted from
+// apps/comms-hub/src/types/index.ts (that module's local `NotificationTier`)
+// as part of the same RBAC-promotion decision above -- the dashboard's
+// unified review/approval queue needs a shared priority concept to sort
+// items from multiple modules (proposals, social posts, comms threads)
+// against one scale. The *computation* of a tier stays module-local (each
+// module's items become urgent/today/fyi for different reasons -- see
+// apps/comms-hub/src/lib/tiers.ts's computeTier() for that module's
+// heuristic); only the type and its display metadata are shared.
+// ============================================================
+
+export const NOTIFICATION_TIERS = ["urgent", "today", "fyi"] as const;
+export type NotificationTier = (typeof NOTIFICATION_TIERS)[number];
+
+export const NOTIFICATION_TIER_LABELS: Record<NotificationTier, string> = {
+  urgent: "Urgent",
+  today: "Today",
+  fyi: "FYI",
+};
+
+/** Lower = higher priority. Sort ascending for urgent-first ordering. */
+export const NOTIFICATION_TIER_ORDER: Record<NotificationTier, number> = {
+  urgent: 0,
+  today: 1,
+  fyi: 2,
+};
