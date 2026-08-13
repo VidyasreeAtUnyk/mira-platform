@@ -42,7 +42,7 @@ export async function Nav() {
       </div>
       <p className="mx-auto max-w-5xl px-4 pb-2 text-[11px] text-brand-body/50">
         &quot;Viewing as&quot; is a stand-in for real RBAC/auth (none is wired up yet) -- not a
-        security boundary. Poster creation is founder-only per SPEC.md.
+        security boundary. Poster creation is Owner/COO-only (SPEC.md&apos;s &quot;founder-only-for-now&quot;) per SPEC.md.
       </p>
     </header>
   );

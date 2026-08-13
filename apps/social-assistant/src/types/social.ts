@@ -34,6 +34,7 @@
  * community, photos) into the real shared schema.
  */
 import type {
+  AgentRole,
   Property,
   PostStatus,
   SocialPlatform,
@@ -45,6 +46,8 @@ import type {
   SocialPostMetric,
 } from '@mira/shared-types';
 import {
+  AGENT_ROLES,
+  AGENT_ROLE_LABELS,
   POST_STATUSES,
   SOCIAL_PLATFORMS,
   POST_KINDS,
@@ -79,22 +82,20 @@ export const METRIC_TYPES = SOCIAL_METRIC_TYPES;
 // ============================================================
 
 /**
- * SPEC.md RBAC table: poster creation is "Founder-only-for-now" (opens to
- * junior/marketing staff later via config, no code change per SPEC.md).
- * `@mira/shared-types`'s `AgentRole` ('agent' | 'manager' | 'admin') doesn't
- * model "founder" or "marketing" -- those are SPEC.md RBAC roles that
- * haven't landed in the shared schema yet. Rather than guess at shared-type
- * changes (out of bounds for this module), this is a local, deliberately
- * minimal capability check pending real RBAC. See PROGRESS-social.md Notes.
+ * RESOLVED (was a local 'founder'/'marketing'/'other' stand-in here, see
+ * PROGRESS-integration.md for the full writeup): `@mira/shared-types`'s
+ * `AgentRole` is now SPEC.md's 6-role table directly. "Founder" in
+ * SPEC.md's RBAC table is the Owner/COO role -- `owner_coo` below.
  */
-export const POSTER_CREATOR_VIEWER_ROLES = ['founder', 'marketing', 'other'] as const;
-export type ViewerRole = (typeof POSTER_CREATOR_VIEWER_ROLES)[number];
+export const POSTER_CREATOR_VIEWER_ROLES = AGENT_ROLES;
+export type ViewerRole = AgentRole;
+export const VIEWER_ROLE_LABELS = AGENT_ROLE_LABELS;
 
 export function canCreatePosters(role: ViewerRole): boolean {
-  // Founder-only-for-now (SPEC.md RBAC table). Loosen via config later, not
-  // by editing this function inline per request -- see SPEC.md's "loosens
-  // over time" note.
-  return role === 'founder';
+  // Founder-only-for-now (SPEC.md RBAC table) -- "founder" is the Owner/COO
+  // role. Loosen via config later, not by editing this function inline per
+  // request -- see SPEC.md's "loosens over time" note.
+  return role === 'owner_coo';
 }
 
 /**

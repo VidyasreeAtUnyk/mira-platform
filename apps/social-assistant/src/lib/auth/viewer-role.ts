@@ -14,7 +14,7 @@ import type { ViewerRole } from '@/types/social';
 import { POSTER_CREATOR_VIEWER_ROLES } from '@/types/social';
 
 const COOKIE_NAME = 'social_viewer_role';
-const DEFAULT_ROLE: ViewerRole = 'founder';
+const DEFAULT_ROLE: ViewerRole = 'owner_coo';
 
 export async function getViewerRole(): Promise<ViewerRole> {
   const store = await cookies();

@@ -14,9 +14,9 @@ export default async function NewPosterPage() {
       <div className="rounded-lg border border-brand-hairline bg-brand-bg-alt p-6">
         <h1 className="mb-2 text-lg font-semibold">Poster creation is founder-only for now</h1>
         <p className="text-sm text-brand-body/70">
-          Per SPEC.md&apos;s RBAC table, poster creation is restricted to the founder until junior/marketing staff
-          are onboarded (config change, no code change, when that happens). Switch &quot;Viewing as&quot; to{' '}
-          <strong>founder</strong> in the nav to try this flow.
+          Per SPEC.md&apos;s RBAC table, poster creation is restricted to the founder (Owner/COO) until junior/
+          marketing staff are onboarded (config change, no code change, when that happens). Switch &quot;Viewing
+          as&quot; to <strong>Owner / COO</strong> in the nav to try this flow.
         </p>
       </div>
     );

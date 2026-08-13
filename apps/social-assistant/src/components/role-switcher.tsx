@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
-import { POSTER_CREATOR_VIEWER_ROLES, type ViewerRole } from '@/types/social';
+import { POSTER_CREATOR_VIEWER_ROLES, VIEWER_ROLE_LABELS, type ViewerRole } from '@/types/social';
 
 interface RoleSwitcherProps {
   currentRole: ViewerRole;
@@ -31,7 +31,7 @@ export function RoleSwitcher({ currentRole, action }: RoleSwitcherProps) {
       >
         {POSTER_CREATOR_VIEWER_ROLES.map((r) => (
           <option key={r} value={r}>
-            {r}
+            {VIEWER_ROLE_LABELS[r]}
           </option>
         ))}
       </select>
