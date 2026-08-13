@@ -70,13 +70,20 @@ gap, and out of scope for this pass.
   summary, no MOU-expiry/compliance alerts. Each would need its own
   dashboard query + UI section; none is blocked on a product decision
   anymore, just build time.
-- Cross-app navigation still doesn't exist -- the dashboard's nav items
-  for the other 5 modules are still `status: "planned"` (see
-  `apps/dashboard/src/lib/roles.ts`'s `NavItem` comment) because each
-  module is a separate Next.js deployment on its own port/origin with no
-  routing gateway or multi-zone setup connecting them. That's a
-  deployment-architecture decision, tracked separately from the RBAC/
-  tier decisions this pass resolved.
+- **RESOLVED** (commit `94c98da`): cross-app navigation now works, via
+  Next.js Multi-Zones -- `apps/dashboard` is the root zone, each of
+  `apps/pipeline`/`apps/trackers`/`apps/social-assistant`/`apps/comms-hub`
+  keeps its own `basePath` and stays independently deployed, proxied
+  through dashboard's `next.config.ts` rewrites. Verified with all 5 apps
+  running together, clicking through from the dashboard, not just
+  individually. `financials` nav item stays `"planned"` -- no app exists
+  for it (SPEC.md module 5 was never assigned to a build module). Caught
+  and fixed a real bug along the way: `apps/pipeline`'s root page did
+  `redirect("/pipeline")` to a same-named sub-route, which under
+  Multi-Zones' automatic basePath-prepending became a real HTTP redirect
+  that leaked the zone's own origin back to the browser (manifested as a
+  proxy socket hang up, not just a cosmetic double-slash) -- fixed by
+  rendering the board directly at root instead of redirecting to it.
 - `apps/social-assistant`'s narrower `'founder'`/`'marketing'`/`'other'`
   `ViewerRole` stand-in was deliberately left as-is (not folded into the
   new shared `AgentRole`) -- lower value than the dashboard/comms-hub
