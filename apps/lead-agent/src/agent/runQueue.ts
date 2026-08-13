@@ -7,6 +7,7 @@ import { getDb, ready } from "../db/client.js";
 import { getRunState, setRunState, tryAcquireLock, releaseLock } from "../db/queries.js";
 import { getQueue } from "./queue.js";
 import { runAgentForLead, type RunResult, type ProgressCallback } from "./loop.js";
+import { isBudgetAvailable } from "./budgetGovernor.js";
 
 function defaultWorkerId(): string {
   return `worker-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -55,6 +56,15 @@ export async function processQueue(
         await releaseLock(db, leadId, workerId);
       }
     }
+  }
+
+  // Budget pre-check: a resumed in-progress lead above still gets a real
+  // attempt (loop.ts's own per-call check will escalate it gracefully if
+  // the cap is truly gone) but there's no reason to start iterating fresh
+  // leads from the full queue -- each would just be "parked on escalation"
+  // for a budget reason one at a time -- once the cap is already spent.
+  if (!(await isBudgetAvailable(db))) {
+    return results;
   }
 
   const fullQueue = only !== undefined ? (await getQueue(db)).filter((l) => l.id === only) : await getQueue(db);
@@ -108,7 +118,12 @@ async function main() {
     },
   });
   if (results.length === 0) {
-    console.log("Queue is empty -- nothing to process.");
+    const budgetLeft = await isBudgetAvailable(db);
+    console.log(
+      budgetLeft
+        ? "Queue is empty -- nothing to process."
+        : "Daily AI budget cap already reached -- nothing started this pass. Try again after it resets (UTC midnight)."
+    );
   }
 }
 

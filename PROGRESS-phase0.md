@@ -70,6 +70,33 @@ Status: done
 - Nothing -- both apps read/write the shared schema now. See Blockers for what's genuinely left (all environment/
   credentials issues, not code).
 
+## Update -- 2026-08-14, Agent Core (SPEC.md phase 1) budget governor wired
+`apps/lead-agent`'s reasoning loop (`src/agent/loop.ts`) already existed in full from Phase 0 -- OpenAI tool-calling,
+propose/approve/send state machine, retry/backoff, resumable queue processing (`src/agent/runQueue.ts`) -- but had
+never been run against a live `OPENAI_API_KEY`, and had no hard cap on call volume. This run added:
+- `src/agent/budgetGovernor.ts` + a new app-local `ai_call_log` table (`src/db/local-schema.sql`) -- hard cap
+  (`AGENT_CORE_DAILY_CALL_CAP`, default/current value 50/day), persisted in Postgres so it survives restarts and
+  holds across concurrent workers. App-local rather than shared, per the precedent `packages/shared-db/README.md`
+  already documents for `apps/social-assistant`'s own `ai_call_log` -- no cross-module Agent Core exists yet to
+  justify a shared ledger.
+- Wired into `loop.ts` (checked before every real completion call; a budget-exceeded lead escalates gracefully via
+  the existing `escalate_to_agent` tool, same as any other LLM failure) and `runQueue.ts` (a cheap pre-check skips
+  starting a fresh pass entirely once the cap is spent, rather than parking every queued lead one at a time).
+- `apps/lead-agent/.env` (gitignored, not committed) now has a real `OPENAI_API_KEY` and `DATABASE_URL` pointed at
+  `mira_staging_dev` -- the same database every other module reads, so this app's proposals genuinely feed
+  `apps/dashboard`'s Review Queue now, not a disconnected local database.
+- **Verified live, with explicit human sign-off before spending real API calls**: cap-forced-to-0 test correctly
+  refused with zero spend; a real run against one lead (`Fatima Hassan`) made a real OpenAI request, correctly
+  recorded it against the budget ledger (1/50), and hit a real 429 from the OpenAI account's own tokens-per-minute
+  limit (100k/100k used) -- the retry/backoff logic correctly recognized OpenAI's own stated ~11h reset as not worth
+  retrying and escalated the lead cleanly instead of hanging, exactly as designed. The account behind the supplied
+  key needs billing/a higher tier before further live runs will actually produce proposals -- not a code blocker.
+
+This is the first real instance of Agent Core's "scheduled + event-triggered reasoning loop" running against live
+data, scoped to module 1 (CRM + lead follow-up) only. A true cross-module Agent Core (reasoning over inventory
+compliance alerts, social captions, comms drafts too) is still not built -- see SPEC.md phase 1 and
+PROGRESS-integration.md's roadmap notes.
+
 ## Next
 For whoever picks this up (a human, or a future module-branch session per MODULES.json Step 2, now unblocked):
 1. Supply real Supabase Postgres credentials (see Blockers) and run `supabase db push` (or apply

@@ -6,6 +6,7 @@ import { dispatchToolCall } from "../tools/index.js";
 import { getLead, insertRunMetric } from "../db/queries.js";
 import { nowIso } from "../db/client.js";
 import type { RunOutcomeKind } from "../domain/types.js";
+import { checkAndRecordCall, BudgetExceededError } from "./budgetGovernor.js";
 import {
   DEFAULT_MODEL,
   MAX_ASSISTANT_TURNS,
@@ -222,6 +223,10 @@ export async function runAgentForLead(
 
     let completion: OpenAI.Chat.Completions.ChatCompletion;
     try {
+      // Budget governor: reserves this turn's call against the daily cap
+      // before spending anything -- fails closed rather than let a run get
+      // partway through and then hit the cap mid-turn. See budgetGovernor.ts.
+      await checkAndRecordCall(db, "lead_followup_reasoning", DEFAULT_MODEL, leadId);
       completion = await createCompletionWithRetry(
         client,
         { model: DEFAULT_MODEL, messages, tools: OPENAI_TOOLS, tool_choice: "auto" },
@@ -231,18 +236,22 @@ export async function runAgentForLead(
         }
       );
     } catch (e) {
-      // The LLM call itself failed after retries were exhausted -- this must
-      // never crash the process or leave the lead mid-mutation. Escalate
-      // gracefully with a clear reason instead.
+      // The budget cap was hit, or the LLM call itself failed after retries
+      // were exhausted -- either way this must never crash the process or
+      // leave the lead mid-mutation. Escalate gracefully with a clear reason.
       const message = e instanceof Error ? e.message : String(e);
+      const reasonPrefix = e instanceof BudgetExceededError ? "Daily AI budget cap reached" : "LLM call failed after retries";
       toolCallCount += 1;
       await dispatchToolCall(db, leadId, "escalate_to_agent", {
         lead_id: leadId,
-        reason: `LLM call failed after retries: ${message}`,
+        reason: `${reasonPrefix}: ${message}`,
         system_triggered: true,
       });
       onProgress?.({ turn: turns, phase: "tool_call", toolName: "escalate_to_agent", tokensSoFar: totalTokens });
-      return finish({ kind: "escalated", reason: "llm_call_failed" }, turns);
+      return finish(
+        { kind: "escalated", reason: e instanceof BudgetExceededError ? "budget_exceeded" : "llm_call_failed" },
+        turns
+      );
     }
 
     totalTokens += completion.usage?.total_tokens ?? 0;

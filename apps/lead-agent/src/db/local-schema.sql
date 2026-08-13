@@ -21,3 +21,22 @@ create table if not exists run_metrics (
 );
 
 create index if not exists idx_run_metrics_lead on run_metrics(lead_id);
+
+-- Budget governor's audited call ledger (src/agent/budgetGovernor.ts), per
+-- SPEC.md's "Budget governor -- hard caps on AI call volume/spend, enforced
+-- in the agent core itself, not left to convention" and CLAUDE.md's "no
+-- unbounded loops of calls" rule. App-local by the same precedent as
+-- apps/social-assistant/db/schema.sql's own ai_call_log (see
+-- packages/shared-db/README.md's "Tables that stay app-local" note) --
+-- each AI-calling module ledgers its own spend against its own table; there
+-- is no cross-module shared cap yet, since no cross-module Agent Core
+-- exists to enforce one.
+create table if not exists ai_call_log (
+  id uuid primary key default uuid_generate_v4(),
+  lead_id uuid references leads(id) on delete set null,
+  purpose text not null,
+  model text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_ai_call_log_created on ai_call_log(created_at);
