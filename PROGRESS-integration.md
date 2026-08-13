@@ -1,13 +1,16 @@
 # Progress — integration
 
-Status: in-progress
-<!-- Was "needs-human-review" -- the two blocking product decisions (RBAC
-     model, notification-tier unification) are now made and implemented,
-     see "Product decisions resolved" below. Not "done" yet: dashboard's
-     Review Queue now merges proposals/ai_suggestions/social_posts, but
-     trackers/pipeline/inventory/comms-hub still have no presence on the
-     dashboard beyond that (no goals widget, no pipeline summary, etc.) --
-     that's real remaining implementation work, not a blocked decision. -->
+Status: done
+<!-- Was "needs-human-review", then "in-progress" -- both blocking product
+     decisions (RBAC, notification tiers) are made and implemented, cross-app
+     navigation works (Multi-Zones), the dashboard now has real widgets for
+     every module with a database (review queue, team goals, pipeline
+     summary, compliance alerts), and both documented bugs from the human
+     verification pass are fixed (plus two more of the same class, found
+     along the way -- see "Remaining work completed" below). What's left
+     (comms-hub has no live database; apps/social-assistant's narrower
+     ViewerRole wasn't folded into the shared AgentRole) is deliberately
+     scoped out, not incomplete -- see "Explicitly out of scope" below. -->
 
 ## Product decisions resolved (2026-08-13, human + Claude working session)
 
@@ -63,15 +66,10 @@ query yet. Wiring that in requires giving comms-hub a real Postgres-backed
 store first; that's comms-hub infrastructure work, not a dashboard query
 gap, and out of scope for this pass.
 
-## What's still open (real work, not a blocked decision anymore)
+## Remaining work completed (2026-08-13, same working session, continued)
 
-- Trackers, pipeline, and inventory have no presence on the dashboard
-  beyond the review queue -- no goals-progress widget, no pipeline deal
-  summary, no MOU-expiry/compliance alerts. Each would need its own
-  dashboard query + UI section; none is blocked on a product decision
-  anymore, just build time.
-- **RESOLVED** (commit `94c98da`): cross-app navigation now works, via
-  Next.js Multi-Zones -- `apps/dashboard` is the root zone, each of
+- **Cross-app navigation** (commit `94c98da`): works now, via Next.js
+  Multi-Zones -- `apps/dashboard` is the root zone, each of
   `apps/pipeline`/`apps/trackers`/`apps/social-assistant`/`apps/comms-hub`
   keeps its own `basePath` and stays independently deployed, proxied
   through dashboard's `next.config.ts` rewrites. Verified with all 5 apps
@@ -84,12 +82,61 @@ gap, and out of scope for this pass.
   that leaked the zone's own origin back to the browser (manifested as a
   proxy socket hang up, not just a cosmetic double-slash) -- fixed by
   rendering the board directly at root instead of redirecting to it.
+- **Dashboard widgets** (commit `5c0eec6`): trackers/pipeline/inventory now
+  have real presence on the Today view -- Team Goals (active team-scope
+  goals with progress bars), Deals in Motion (active transaction counts by
+  stage), Compliance Alerts (overdue/expiring-soon MOU terms). Each reads
+  the shared database directly, same as the Review Queue already did.
+  Found and fixed a real rendering bug building the last one, by actually
+  rendering it: `apps/dashboard/src/lib/db.ts` had type-parser overrides
+  for numeric/timestamptz/timestamp but not plain `date` columns
+  (`mou_terms.term_end`) -- pg's default date handling returns a JS `Date`
+  object, which crashes React and can shift the calendar date by a day
+  depending on server timezone. Fixed with a `DATE` type parser.
+- **Both documented bugs from the human verification pass, fixed, plus two
+  more of the same underlying class found along the way** (commit
+  `5c0eec6`):
+  - `apps/pipeline`'s seed script no longer blanket-`TRUNCATE`s shared
+    tables it doesn't own -- switched to `apps/trackers`' safer pattern
+    (delete only its own rows, by natural identifier). Verified by seeding
+    trackers then pipeline against the same database and confirming both
+    survive.
+  - The "`apps/inventory` test fixtures miss `agent_id`" bug reported
+    previously turned out to be a **false positive** -- that verification
+    was built against `apps/crm`'s incremental migrations, not the
+    canonical `packages/shared-db/schema.sql` `apps/inventory`'s own test
+    infrastructure actually uses. Running the real test suite (23/23
+    passing) surfaced the actual bug: `schema.sql` declares
+    `leads.agent_id` nullable, `apps/crm`'s migration declares it `NOT
+    NULL` -- genuine drift between two representations of "the same
+    schema" that migration 004 had already fixed for `interactions.
+    agent_id` but missed for `leads`. New migration 007 closes that gap.
+  - Same class of drift, second instance: `schema.sql` defaults
+    `leads.lead_type` to `'buyer'`, `apps/crm`'s migration has no default.
+    Found running `apps/inventory`'s real dev seed script, which also had
+    pipeline's original bug (never set `lead_type` at all) -- fixed that
+    insert directly, migration 008 closes the default-value drift.
+
+Verified against a freshly rebuilt database (all 13 migrations, zero
+errors) with trackers, pipeline, and inventory all seeded together into
+one shared database (previously impossible without pipeline wiping the
+others), and the dashboard actually rendering real data in every section,
+screenshotted, not just typechecked.
+
+## Explicitly out of scope (deliberate, not incomplete)
+
+- `apps/comms-hub` has no live database connection anywhere in this build
+  -- it reads/writes in-memory fixture data only (see its migration
+  file's header). Its pending message drafts are not in the dashboard's
+  Review Queue, and it has no dashboard widget, because there is
+  genuinely nothing to query yet. Wiring that in requires giving
+  comms-hub a real Postgres-backed store first -- that's comms-hub
+  infrastructure work, a separate decision from anything this pass made.
 - `apps/social-assistant`'s narrower `'founder'`/`'marketing'`/`'other'`
   `ViewerRole` stand-in was deliberately left as-is (not folded into the
-  new shared `AgentRole`) -- lower value than the dashboard/comms-hub
+  shared `AgentRole`) -- lower value than the dashboard/comms-hub
   unification (only one implementation, not two independently-converged
-  ones) and would touch 8 call sites for a cosmetic-only cleanup. Fine to
-  revisit later, not blocking anything.
+  ones) and would touch 8 call sites for a cosmetic-only cleanup.
 
 ## Done
 
