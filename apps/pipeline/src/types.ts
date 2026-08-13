@@ -49,6 +49,12 @@ export interface Transaction {
   updated_at: string;
 }
 
+export interface TransactionWithLead extends Transaction {
+  lead_name: string | null;
+  lead_phone: string | null;
+  lead_email: string | null;
+}
+
 export interface TransactionStageHistoryRow {
   id: string;
   transaction_id: string;

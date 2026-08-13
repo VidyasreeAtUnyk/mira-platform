@@ -15,7 +15,7 @@
 import Link from 'next/link';
 import { ArrowLeft, ShieldAlert } from 'lucide-react';
 import { getCurrentViewer } from '@/lib/auth/viewer';
-import { listMessages, listThreads, markThreadRead } from '@/lib/data/comms';
+import { getLeadSummary, listMessages, listThreads, markThreadRead } from '@/lib/data/comms';
 import { canViewThread, COMMS_ROLE_LABELS } from '@/lib/rbac';
 import { ChannelIcon, StatusBadge, TierBadge, TimeAgo } from '@/components/badges';
 import { ReplyBox } from '@/components/reply-box';
@@ -25,10 +25,12 @@ export const revalidate = 0;
 
 export default async function ThreadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [{ viewer }, threads, allMessages] = await Promise.all([getCurrentViewer(), listThreads(), listMessages()]);
+  const [{ viewer, viewers }, threads, allMessages] = await Promise.all([getCurrentViewer(), listThreads(), listMessages()]);
 
   const thread = threads.find((t) => t.id === id);
   const allowed = thread ? canViewThread(thread, viewer) : false;
+  const linkedLead = thread?.leadId ? await getLeadSummary(thread.leadId) : null;
+  const assignedAgent = thread?.agentId ? viewers.find((v) => v.agentId === thread.agentId) : null;
 
   if (thread && allowed && thread.unread) {
     await markThreadRead(thread.id);
@@ -87,8 +89,12 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
         <p className="mt-1 text-sm text-muted-foreground">{thread.contactHandle}</p>
         {thread.subject && <p className="mt-1 text-sm font-medium">{thread.subject}</p>}
         <p className="mt-1 text-xs text-muted-foreground">
-          {thread.leadId ? `Linked to lead ${thread.leadId}` : 'Not linked to a CRM lead'}
-          {thread.agentId ? ` · Assigned to ${thread.agentId}` : ' · Unassigned'}
+          {linkedLead
+            ? `Linked to lead: ${linkedLead.name}${linkedLead.phone ? ` (${linkedLead.phone})` : ''}`
+            : thread.leadId
+              ? 'Linked to a lead no longer in the system'
+              : 'Not linked to a CRM lead'}
+          {assignedAgent ? ` · Assigned to ${assignedAgent.displayName}` : thread.agentId ? ' · Assigned to an agent no longer in the system' : ' · Unassigned'}
         </p>
       </div>
 

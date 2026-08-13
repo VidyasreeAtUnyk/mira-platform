@@ -4,6 +4,7 @@ import type {
   CreateTransactionInput,
   Transaction,
   TransactionStageHistoryRow,
+  TransactionWithLead,
   TransitionTransactionInput,
 } from "../types";
 
@@ -16,8 +17,37 @@ export async function listTransactions(db: Pool, opts: { stage?: PipelineStage }
   return result.rows;
 }
 
+/**
+ * Same as listTransactions but joined to `leads` for display purposes (the
+ * board was rendering a truncated `lead_id` UUID because nothing ever
+ * fetched a name -- see PROGRESS-pipeline.md). Kept as a separate function
+ * rather than changing listTransactions' shape, since that one also backs
+ * the JSON API route (app/api/transactions/route.ts) and its response
+ * contract shouldn't change silently.
+ */
+export async function listTransactionsWithLead(db: Pool): Promise<TransactionWithLead[]> {
+  const result = await db.query<TransactionWithLead>(
+    `SELECT t.*, l.name AS lead_name, l.phone AS lead_phone, l.email AS lead_email
+     FROM transactions t
+     LEFT JOIN leads l ON l.id = t.lead_id
+     ORDER BY t.updated_at DESC`,
+  );
+  return result.rows;
+}
+
 export async function getTransaction(db: Pool, id: string): Promise<Transaction | null> {
   const result = await db.query<Transaction>("SELECT * FROM transactions WHERE id = $1", [id]);
+  return result.rows[0] ?? null;
+}
+
+export async function getTransactionWithLead(db: Pool, id: string): Promise<TransactionWithLead | null> {
+  const result = await db.query<TransactionWithLead>(
+    `SELECT t.*, l.name AS lead_name, l.phone AS lead_phone, l.email AS lead_email
+     FROM transactions t
+     LEFT JOIN leads l ON l.id = t.lead_id
+     WHERE t.id = $1`,
+    [id],
+  );
   return result.rows[0] ?? null;
 }
 

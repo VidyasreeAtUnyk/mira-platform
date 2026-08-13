@@ -185,6 +185,24 @@ async function computeAndPersistTier(threadId: string): Promise<void> {
   await db.query(`update message_threads set tier = $2 where id = $1`, [threadId, tier]);
 }
 
+/**
+ * Resolves a thread's `leadId` to a display name (+ contact), for the
+ * thread detail page -- was rendering the raw uuid as "Linked to lead
+ * <uuid>" (see PROGRESS-comms.md), which is real data but not readable.
+ * Not a Link to anywhere: this app has no reachable lead-detail route in
+ * the current Multi-Zones setup (apps/dashboard's rewrites only proxy
+ * pipeline/trackers/social/comms, not apps/crm) -- so this is a name
+ * lookup, not (yet) a navigation target.
+ */
+export async function getLeadSummary(leadId: string): Promise<{ name: string; phone: string | null; email: string | null } | null> {
+  const db = getDb();
+  const res = await db.query<{ name: string; phone: string | null; email: string | null }>(
+    `select name, phone, email from leads where id = $1`,
+    [leadId]
+  );
+  return res.rows[0] ?? null;
+}
+
 export async function markThreadRead(threadId: string): Promise<void> {
   const db = getDb();
   await db.query(`update message_threads set unread = false where id = $1 and unread = true`, [threadId]);
