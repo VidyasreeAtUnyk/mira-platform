@@ -1,0 +1,23 @@
+-- Migration 007: leads.agent_id -> nullable
+--
+-- Real schema drift, found by actually running apps/inventory's test suite
+-- through its own test infrastructure rather than trusting an earlier
+-- manual verification pass (see PROGRESS-integration.md's human
+-- verification pass -- what was reported there as "apps/inventory's test
+-- fixtures miss a required agent_id" was itself a false positive: it was
+-- built against a database seeded via apps/crm's incremental migrations
+-- (agent_id NOT NULL), not the canonical packages/shared-db/schema.sql
+-- apps/inventory's own createTestDb() actually uses (agent_id nullable).
+-- apps/inventory's real test suite passes 23/23 as-is; the actual bug is
+-- that these two representations of "the same shared schema" had quietly
+-- diverged on this one constraint).
+--
+-- packages/shared-db/schema.sql's version (nullable) is the one that
+-- matches real usage: apps/lead-agent never sets agent_id when creating a
+-- lead (grep src/db/seed.ts, src/db/queries.ts -- no agent_id reference
+-- anywhere), by design -- it handles discovery-stage leads before a human
+-- agent is assigned. Migration 004 already relaxed the identical
+-- constraint on interactions.agent_id for the exact same reason
+-- ("lead-agent's automated tool calls may [have no agent]") -- this
+-- migration is that same fix, just for leads, which 004 missed.
+alter table leads alter column agent_id drop not null;

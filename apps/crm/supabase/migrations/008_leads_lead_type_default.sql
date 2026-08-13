@@ -1,0 +1,19 @@
+-- Migration 008: leads.lead_type -> default 'buyer'
+--
+-- Same class of bug as 007_leads_agent_id_nullable.sql: packages/shared-db/
+-- schema.sql declares `lead_type text not null default 'buyer'`, but
+-- apps/crm's own migration (001_initial_schema.sql) has the NOT NULL
+-- without the DEFAULT. Found by hitting a real "null value in column
+-- lead_type" error running apps/inventory's dev seed script
+-- (src/db/seed.ts) against a database built from apps/crm's migrations --
+-- apps/pipeline's seed script hit the identical error earlier for the same
+-- underlying reason (see PROGRESS-integration.md's human verification
+-- pass and its follow-up commits).
+--
+-- This migration doesn't change behavior for any INSERT that already
+-- specifies lead_type explicitly (every current seed script does, now that
+-- pipeline's and inventory's are both fixed) -- it only brings this
+-- database in line with what schema.sql already documents as the intended
+-- default, so a *future* insert that omits lead_type doesn't hit the same
+-- surprise a third time.
+alter table leads alter column lead_type set default 'buyer';

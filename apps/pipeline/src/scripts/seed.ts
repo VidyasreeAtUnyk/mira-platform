@@ -42,18 +42,44 @@ export interface SeedIds {
 }
 
 /**
- * Wipes every table this app owns or shares, then rebuilds fixtures.
- * Mirrors apps/lead-agent/src/db/reset.ts + seed.ts's wipe list, extended
- * with the pipeline-owned tables this migration added. Run against a
- * dedicated pipeline dev/test database (see .env.example) -- this is a
- * destructive TRUNCATE, never point it at a shared/production database.
+ * Rebuilds fixtures. Only TRUNCATEs tables this app actually owns
+ * (transaction_stage_history/transactions/listing_price_changes) -- an
+ * earlier version of this script blanket-TRUNCATEd shared tables
+ * (agents/leads/properties/proposals/ai_suggestions/interactions/
+ * engagement_events/audit_log/property_price_history) it doesn't own,
+ * which silently destroyed other modules' seed data whenever this ran
+ * against a shared database (found by actually running apps/trackers' seed
+ * and this one against the same database, not just reading the code -- see
+ * PROGRESS-integration.md's human verification pass). Fixed by switching
+ * to the same "delete only my own specific rows, by a natural identifier"
+ * pattern apps/trackers' seed already used correctly: this script's
+ * agents/leads/properties are deleted by their known email/phone/address
+ * (not blanket-truncated), then reinserted, leaving any other module's
+ * seed data in those same tables untouched. Run against a dev/test
+ * database, not production -- it's still a real delete, just scoped now.
  */
+const SEED_AGENT_EMAILS = ["priya.nair@example.com", "omar.haddad@example.com"];
+const SEED_LEAD_PHONES = ["+971-50-100-0001", "+971-50-100-0002", "+971-50-100-0003", "+971-50-100-0004"];
+const SEED_PROPERTY_ADDRESSES = [
+  "Marina Tower, Unit 2104",
+  "Palm Jumeirah Villa 12",
+  "Downtown Loft 803",
+  "Dubai Hills Townhouse 44",
+  "JVC Studio 12B",
+];
+
 export async function seedDatabase(db: Pool): Promise<SeedIds> {
-  await db.query(
-    `TRUNCATE audit_log, proposals, ai_suggestions, interactions, engagement_events,
-      transaction_stage_history, transactions, listing_price_changes,
-      property_price_history, properties, leads, agents CASCADE`,
-  );
+  // Pipeline-owned tables: safe to fully TRUNCATE, nothing else writes them.
+  await db.query(`TRUNCATE transaction_stage_history, transactions, listing_price_changes CASCADE`);
+
+  // Shared tables: delete only this script's own previously-seeded rows
+  // (by natural identifier), not the whole table -- leaves other modules'
+  // seed data alone. `on delete cascade`/`set null` on the FKs referencing
+  // these rows means this is safe even if a prior run's transactions still
+  // reference them (already gone via the TRUNCATE above).
+  await db.query(`DELETE FROM leads WHERE phone = ANY($1::text[])`, [SEED_LEAD_PHONES]);
+  await db.query(`DELETE FROM agents WHERE email = ANY($1::text[])`, [SEED_AGENT_EMAILS]);
+  await db.query(`DELETE FROM properties WHERE address = ANY($1::text[])`, [SEED_PROPERTY_ADDRESSES]);
 
   async function insertAgent(name: string, email: string): Promise<string> {
     const r = await db.query<{ id: string }>(

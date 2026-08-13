@@ -10,15 +10,21 @@
  * queue) doesn't exist yet, so the "what would the agent tell me" part of
  * the Today view brief is a clearly-labeled placeholder, not faked content.
  */
-import { Flame, Inbox, Phone, Sparkles, Trophy, Users } from "lucide-react";
+import { AlertTriangle, Flame, Inbox, Phone, Sparkles, Target, Trophy, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { RoleSwitcher } from "@/components/layout/role-switcher";
 import {
   getColdLeads,
+  getComplianceAlerts,
   getDashboardStats,
   getLeadNamesByIds,
+  getPipelineSummary,
   getReviewQueue,
+  getTeamGoalsSummary,
+  type ComplianceAlert,
+  type PipelineStageCount,
   type ReviewQueueItem,
+  type TeamGoalProgress,
 } from "@/lib/queries";
 import { cn, timeAgo, titleCase } from "@/lib/utils";
 import {
@@ -45,10 +51,13 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   const params = await searchParams;
   const role: DashboardRole = isDashboardRole(params.role) ? params.role : "owner_coo";
 
-  const [stats, coldLeads, reviewQueue] = await Promise.all([
+  const [stats, coldLeads, reviewQueue, teamGoals, pipelineSummary, complianceAlerts] = await Promise.all([
     getDashboardStats(),
     getColdLeads(COLD_LEADS_LIMIT),
     getReviewQueue(),
+    getTeamGoalsSummary(),
+    getPipelineSummary(),
+    getComplianceAlerts(),
   ]);
 
   const reviewQueueLeadIds = reviewQueue
@@ -212,6 +221,89 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
                 </p>
               )}
             </>
+          )}
+        </section>
+
+        {/* Cross-module glance tiles -- getTeamGoalsSummary() (apps/trackers),
+            getPipelineSummary() (apps/pipeline), getComplianceAlerts()
+            (apps/inventory). Each reads the shared Postgres database
+            directly, same as everything else on this page -- real data,
+            not a stand-in for cross-app navigation (see next.config.ts's
+            rewrites for that). Compliance alerts render only when non-empty
+            (an empty compliance widget taking up space year-round would be
+            noise); goals/pipeline always render so an empty state is
+            visibly "checked and genuinely empty", not "not built yet". */}
+        <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+            <div className="mb-3 flex items-center gap-2">
+              <Target className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold">Team Goals</h2>
+            </div>
+            {teamGoals.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No active team goals.</p>
+            ) : (
+              <ul className="space-y-3">
+                {teamGoals.map(({ goal, totalLogged, percentToGoal }) => (
+                  <li key={goal.id}>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="truncate font-medium">{titleCase(goal.metric)}</span>
+                      <span className="shrink-0 text-muted-foreground">
+                        {totalLogged.toLocaleString()} / {goal.target_value.toLocaleString()} {goal.unit ?? ""}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary"
+                        style={{ width: `${Math.min(percentToGoal, 100)}%` }}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+            <div className="mb-3 flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold">Deals in Motion</h2>
+              <Badge variant="primary">{pipelineSummary.activeCount}</Badge>
+            </div>
+            {pipelineSummary.byStage.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No active deals in the pipeline.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {pipelineSummary.byStage.map(({ stage, count }: PipelineStageCount) => (
+                  <li key={stage} className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">{titleCase(stage)}</span>
+                    <span className="font-medium">{count}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {complianceAlerts.length > 0 && (
+            <div className="rounded-xl border border-warning/50 bg-warning/5 p-4 shadow-sm">
+              <div className="mb-3 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-warning-foreground" />
+                <h2 className="text-sm font-semibold">Compliance Alerts</h2>
+                <Badge variant="warning">{complianceAlerts.length}</Badge>
+              </div>
+              <ul className="space-y-2">
+                {complianceAlerts.map((alert: ComplianceAlert) => (
+                  <li key={alert.mouTermId} className="text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant={alert.urgency === "overdue" ? "destructive" : "warning"}>
+                        {alert.urgency === "overdue" ? "Overdue" : "Expiring soon"}
+                      </Badge>
+                      <span className="font-medium">{alert.developerPartnerName}</span>
+                    </div>
+                    <p className="mt-0.5 text-muted-foreground">MOU term ends {alert.termEnd}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </section>
 

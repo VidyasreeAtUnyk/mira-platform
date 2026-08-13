@@ -250,8 +250,8 @@ export async function seedDatabase(db: Db): Promise<SeedIds> {
     if (existing.rows[0]) return existing.rows[0].id;
     const result = await db.query<{ id: string }>(
       `INSERT INTO leads
-        (name, phone, property_interest, property_type, budget_min, budget_max, location_pref, preferred_areas, bedrooms, stage, source, segment, do_not_contact, contact_count)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'inventory_seed', 'prospect', false, 0)
+        (name, phone, property_interest, property_type, budget_min, budget_max, location_pref, preferred_areas, bedrooms, stage, source, segment, lead_type, do_not_contact, contact_count)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'inventory_seed', 'prospect', 'buyer', false, 0)
        RETURNING id`,
       [
         input.name,

@@ -13,6 +13,7 @@ import type {
   Agent,
   AISuggestion,
   DashboardStats,
+  Goal,
   Lead,
   NotificationTier,
   Proposal,
@@ -183,4 +184,104 @@ export async function getLeadNamesByIds(ids: string[]): Promise<Map<string, stri
     [ids]
   );
   return new Map(res.rows.map((r) => [r.id, r.name]));
+}
+
+// ============================================================
+// Cross-module summary widgets (apps/trackers, apps/pipeline,
+// apps/inventory). Each reads the shared Postgres database directly, same
+// as the Review Queue above -- no cross-app HTTP calls, since the data
+// layer is already shared even though the UI layer (Multi-Zones,
+// next.config.ts) is not. Row shapes below are deliberately minimal local
+// interfaces, not imports from apps/pipeline or apps/inventory's own
+// types -- CLAUDE.md's module-boundary rule ("don't reach into another
+// module's directory") applies here just as much as it would to importing
+// their code; `Goal` is different because it's already promoted into
+// @mira/shared-types (see PROGRESS-integration.md), Transaction/MouTerm
+// are not.
+// ============================================================
+
+export interface TeamGoalProgress {
+  goal: Goal;
+  totalLogged: number;
+  percentToGoal: number;
+}
+
+/**
+ * Active team-scope goals with their current progress -- mirrors
+ * apps/trackers/src/lib/goals.ts's own progress computation (sum of
+ * goal_progress_entries.value vs. target_value) closely enough for a
+ * summary tile, without importing that module's code.
+ */
+export async function getTeamGoalsSummary(): Promise<TeamGoalProgress[]> {
+  const db = getDb();
+  const res = await db.query<Goal & { total_logged: string | null }>(
+    `select g.*, (select coalesce(sum(value), 0) from goal_progress_entries where goal_id = g.id) as total_logged
+     from goals g
+     where g.scope = 'team' and g.status = 'active'
+     order by g.period_end asc`
+  );
+  return res.rows.map((row) => {
+    const { total_logged, ...goal } = row;
+    const totalLogged = Number(total_logged ?? 0);
+    return {
+      goal,
+      totalLogged,
+      percentToGoal: goal.target_value > 0 ? Math.round((totalLogged / goal.target_value) * 100) : 0,
+    };
+  });
+}
+
+export interface PipelineStageCount {
+  stage: string;
+  count: number;
+}
+
+/**
+ * Active (non-terminal) transaction counts per stage -- a compact version
+ * of apps/pipeline's own kanban board (src/app/page.tsx), for a "deals in
+ * motion" glance rather than the full board.
+ */
+export async function getPipelineSummary(): Promise<{ activeCount: number; byStage: PipelineStageCount[] }> {
+  const db = getDb();
+  const res = await db.query<{ stage: string; count: string }>(
+    `select stage, count(*) from transactions
+     where stage not in ('closed_won', 'closed_lost')
+     group by stage`
+  );
+  const byStage = res.rows.map((r) => ({ stage: r.stage, count: Number(r.count) }));
+  return { activeCount: byStage.reduce((sum, s) => sum + s.count, 0), byStage };
+}
+
+export interface ComplianceAlert {
+  mouTermId: string;
+  developerPartnerName: string;
+  termEnd: string;
+  urgency: "overdue" | "expiring_soon";
+}
+
+/**
+ * MOU terms overdue or expiring within 60 days -- mirrors apps/inventory's
+ * own mouUrgency() classification (src/domain/mou.ts) and its
+ * listMousOverdue/listMousExpiringSoon queries (src/db/queries.ts), reads
+ * only, no write-back here. 60 days matches that module's
+ * MOU_EXPIRING_SOON_DAYS constant -- duplicated as a literal here rather
+ * than imported, same module-boundary reasoning as the interfaces above.
+ */
+export async function getComplianceAlerts(): Promise<ComplianceAlert[]> {
+  const db = getDb();
+  const res = await db.query<{ id: string; name: string; term_end: string; urgency: "overdue" | "expiring_soon" }>(
+    `select m.id, dp.name, m.term_end,
+       case when m.term_end < current_date then 'overdue' else 'expiring_soon' end as urgency
+     from mou_terms m
+     join developer_partners dp on dp.id = m.developer_partner_id
+     where m.status in ('draft', 'active')
+       and m.term_end <= current_date + interval '60 days'
+     order by m.term_end asc`
+  );
+  return res.rows.map((r) => ({
+    mouTermId: r.id,
+    developerPartnerName: r.name,
+    termEnd: r.term_end,
+    urgency: r.urgency,
+  }));
 }

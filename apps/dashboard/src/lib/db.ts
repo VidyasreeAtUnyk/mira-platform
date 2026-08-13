@@ -33,6 +33,19 @@ types.setTypeParser(types.builtins.NUMERIC, (val) => (val === null ? null : pars
 types.setTypeParser(types.builtins.TIMESTAMPTZ, (val) => (val === null ? null : new Date(val).toISOString()));
 types.setTypeParser(types.builtins.TIMESTAMP, (val) => (val === null ? null : new Date(val).toISOString()));
 
+// pg's default `date` (no time component -- e.g. mou_terms.term_end)
+// handling is worse than timestamptz/timestamp above: it parses into a JS
+// `Date` at local-timezone midnight, which both (a) isn't a string (crashes
+// React: "Objects are not valid as a React child", found by actually
+// rendering the Compliance Alerts widget, not by typechecking) and (b) can
+// shift the calendar date by one depending on the server's timezone offset.
+// The type parser callback receives the raw wire value ("2026-07-24")
+// before any of that conversion happens -- returning it unchanged sidesteps
+// both problems at once, unlike round-tripping through `new Date()` the way
+// the timestamptz/timestamp parsers above do (fine for those, since they
+// carry a real time+zone component to begin with).
+types.setTypeParser(types.builtins.DATE, (val) => val);
+
 export const DEFAULT_DATABASE_URL = "postgres://localhost:5432/mira_dev";
 
 let pool: Pool | null = null;
