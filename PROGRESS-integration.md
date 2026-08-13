@@ -7,10 +7,12 @@ Status: done
      every module with a database (review queue, team goals, pipeline
      summary, compliance alerts), and both documented bugs from the human
      verification pass are fixed (plus two more of the same class, found
-     along the way -- see "Remaining work completed" below). What's left
-     (comms-hub has no live database; apps/social-assistant's narrower
-     ViewerRole wasn't folded into the shared AgentRole) is deliberately
-     scoped out, not incomplete -- see "Explicitly out of scope" below. -->
+     along the way -- see "Remaining work completed" below). The two items
+     that were previously "Explicitly out of scope" -- comms-hub having no
+     live database, and apps/social-assistant's narrower ViewerRole not
+     being folded into the shared AgentRole -- have both since been done;
+     see "Remaining work completed" for the comms-hub database rewrite and
+     the dashboard Review Queue wiring that followed from it. -->
 
 ## Product decisions resolved (2026-08-13, human + Claude working session)
 
@@ -58,13 +60,10 @@ from each source table) rendering correctly, tiered and sorted as
 designed, and confirmed the role switcher still narrows nav correctly for
 all 6 roles.
 
-Explicitly not attempted here: `apps/comms-hub`'s pending message drafts
-are not in the merged queue. That app has no live database connection
-anywhere in this build -- it reads/writes in-memory fixture data only
-(see its migration file's header) -- so there's genuinely nothing to
-query yet. Wiring that in requires giving comms-hub a real Postgres-backed
-store first; that's comms-hub infrastructure work, not a dashboard query
-gap, and out of scope for this pass.
+At the time this section was written, `apps/comms-hub`'s pending message
+drafts were not in the merged queue (that app had no live database
+connection yet). See "Remaining work completed" below for the comms-hub
+database rewrite and the Review Queue update that closed this gap.
 
 ## Remaining work completed (2026-08-13, same working session, continued)
 
@@ -123,20 +122,56 @@ one shared database (previously impossible without pipeline wiping the
 others), and the dashboard actually rendering real data in every section,
 screenshotted, not just typechecked.
 
-## Explicitly out of scope (deliberate, not incomplete)
-
-- `apps/comms-hub` has no live database connection anywhere in this build
-  -- it reads/writes in-memory fixture data only (see its migration
-  file's header). Its pending message drafts are not in the dashboard's
-  Review Queue, and it has no dashboard widget, because there is
-  genuinely nothing to query yet. Wiring that in requires giving
-  comms-hub a real Postgres-backed store first -- that's comms-hub
-  infrastructure work, a separate decision from anything this pass made.
-- `apps/social-assistant`'s narrower `'founder'`/`'marketing'`/`'other'`
-  `ViewerRole` stand-in was deliberately left as-is (not folded into the
-  shared `AgentRole`) -- lower value than the dashboard/comms-hub
-  unification (only one implementation, not two independently-converged
-  ones) and would touch 8 call sites for a cosmetic-only cleanup.
+- **`apps/social-assistant`'s `ViewerRole` folded into shared `AgentRole`**:
+  the local `'founder'`/`'marketing'`/`'other'` stand-in (`src/types/
+  social.ts`) is now an alias of `@mira/shared-types`' `AgentRole`/
+  `AGENT_ROLE_LABELS`; `canCreatePosters()` and the role switcher's default
+  now key off `'owner_coo'` instead of `'founder'`. All 8 call sites
+  updated (including hardcoded "founder" copy in `posters/new/page.tsx`
+  and `components/nav.tsx`, and `created_by_role: 'founder'` in the demo
+  fixtures). Verified live: role switcher renders real labels, poster
+  creation gate still restricts to Owner/COO only.
+- **`apps/comms-hub` given a real Postgres-backed database**, replacing
+  its in-memory mock store (`src/lib/mock-data.ts` + `src/components/
+  comms-store.tsx`, both deleted): applied its previously-unapplied
+  `supabase/migrations/001_comms_hub_schema.sql` to `mira_staging_dev`,
+  converted every page to an async Server Component reading `src/lib/
+  data/comms.ts` directly (new data-access layer: `listThreads`,
+  `listMessages`, `listNotifications`, `listViewers` against the real
+  `agents` table, `computeAndPersistTier`, `markThreadRead`,
+  `addReplyDraft`, `createDraftThread`), moved all mutations into Server
+  Actions (`src/app/actions.ts`), and extracted the few genuinely
+  interactive bits (notification-bell toggle, viewer switcher, tier-tab
+  filter, `usePathname()` nav highlighting) into small client-island
+  components since Server Components can't hold that state. Added a real
+  seed script (`src/db/seed.ts`) that resolves real lead/agent ids by
+  name instead of hardcoding uuids, reuses the app's own `computeTier()`
+  rather than re-deriving tiers, and -- since no other module's seed
+  created agents in the `senior_agent`/`marketing_social`/`admin_ops`/
+  `finance` roles -- adds four demo agents in those roles via
+  `INSERT ... ON CONFLICT (email) DO UPDATE` so the RBAC viewer switcher
+  has something real to exercise for every role. Draft-and-hold is
+  preserved by construction, not convention: no code path anywhere in
+  this rewrite ever sets an outbound message's `status` to `'sent'`
+  (verified by reading every write path, not just the state-machine
+  comment in the schema). Two `pg` type-parser gotchas found the same way
+  as dashboard's (by running it, not typechecking): `TIMESTAMPTZ`/
+  `TIMESTAMP` need `.toISOString()`, and passing a function
+  (`roleLabel`) from a Server Component to a Client Component fails
+  outright ("Functions cannot be passed directly to Client Components")
+  -- fixed by having the client island import the shared label map itself
+  instead of receiving it as a prop.
+- **Dashboard's `getReviewQueue()` extended to include comms-hub's pending
+  drafts**, closing the exact gap the "Explicitly out of scope" section
+  used to describe: now queries `messages` joined to `message_threads`
+  for rows where `direction = 'outbound'` and `status in ('draft',
+  'pending_approval')`, reusing the `tier` comms-hub already computed and
+  persisted on the thread rather than recomputing it. `ReviewQueueItem`
+  gained a `"comms_draft"` kind; `apps/dashboard/src/app/page.tsx`'s
+  `ReviewQueueRow` renders it as "Comms Hub draft" alongside proposals/
+  suggestions/social posts. Verified live: seeded two real comms-hub
+  drafts, confirmed both render in the dashboard's Review Queue with the
+  correct tier badge and relative timestamp.
 
 ## Done
 

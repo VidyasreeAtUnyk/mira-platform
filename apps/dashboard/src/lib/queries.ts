@@ -106,33 +106,66 @@ function tierBySchedule(scheduledFor: string | null): NotificationTier {
   return "fyi";
 }
 
+/**
+ * Minimal local shape for apps/comms-hub's outbound message drafts --
+ * deliberately not importing that module's own Message type (CLAUDE.md's
+ * module-boundary rule, same reasoning as PipelineTransaction/MouTerm
+ * below not being imports either). RESOLVED (was excluded here because
+ * comms-hub had no live database, see PROGRESS-integration.md): that app
+ * now has a real Postgres-backed store (its own supabase/migrations/
+ * 001_comms_hub_schema.sql, applied), so this reads its `messages` table
+ * directly, same as every other source in this queue.
+ */
+export interface CommsDraftSummary {
+  id: string;
+  threadId: string;
+  contactName: string;
+  channel: "email" | "whatsapp";
+  body: string;
+  tier: NotificationTier;
+  createdAt: string;
+}
+
 export type ReviewQueueItem =
   | { kind: "proposal"; tier: NotificationTier; createdAt: string; data: Proposal }
   | { kind: "suggestion"; tier: NotificationTier; createdAt: string; data: AISuggestion }
-  | { kind: "social_post"; tier: NotificationTier; createdAt: string; data: SocialPost };
+  | { kind: "social_post"; tier: NotificationTier; createdAt: string; data: SocialPost }
+  | { kind: "comms_draft"; tier: NotificationTier; createdAt: string; data: CommsDraftSummary };
 
 /**
  * Everything currently sitting in the review/approval queue (SPEC.md: "Nearly
  * everything routes here at launch"), merged across every module that has a
  * draft/pending_approval workflow and sorted urgent-first, then oldest-first
  * within a tier. `proposals` + `ai_suggestions` (Phase 0, two tables per the
- * merge decision -- see packages/shared-db/schema.sql's header) and
- * `social_posts` (apps/social-assistant) are read directly since they're
- * all in the same shared Postgres database -- no cross-app call needed.
- *
- * apps/comms-hub's pending-approval message drafts are NOT included here:
- * that app has no live database connection anywhere in this build (reads/
- * writes in-memory fixture data only, see its migration file's header) --
- * there is nothing yet to query. Wiring that in is a comms-hub
- * infrastructure change (giving it a real Postgres-backed store), not a
- * dashboard-side query gap.
+ * merge decision -- see packages/shared-db/schema.sql's header),
+ * `social_posts` (apps/social-assistant), and now `messages` (apps/comms-hub)
+ * are all read directly since they're all in the same shared Postgres
+ * database -- no cross-app call needed. comms-hub's own `tier` column
+ * (already computed there via that module's computeTier(), same heuristic
+ * concept as this file's tierByPendingAge/tierBySchedule) is reused as-is
+ * rather than recomputed here.
  */
 export async function getReviewQueue(): Promise<ReviewQueueItem[]> {
   const db = getDb();
-  const [proposalsRes, suggestionsRes, socialPostsRes] = await Promise.all([
+  const [proposalsRes, suggestionsRes, socialPostsRes, commsDraftsRes] = await Promise.all([
     db.query<Proposal>(`select * from proposals where status = 'pending' order by created_at asc`),
     db.query<AISuggestion>(`select * from ai_suggestions where status = 'pending' order by created_at asc`),
     db.query<SocialPost>(`select * from social_posts where status = 'pending_approval' order by created_at asc`),
+    db.query<{
+      id: string;
+      thread_id: string;
+      contact_name: string;
+      channel: "email" | "whatsapp";
+      body: string;
+      tier: NotificationTier;
+      created_at: string;
+    }>(
+      `select m.id, m.thread_id, t.contact_name, m.channel, m.body, t.tier, m.created_at
+       from messages m
+       join message_threads t on t.id = m.thread_id
+       where m.direction = 'outbound' and m.status in ('draft', 'pending_approval')
+       order by m.created_at asc`
+    ),
   ]);
 
   const items: ReviewQueueItem[] = [
@@ -144,6 +177,22 @@ export async function getReviewQueue(): Promise<ReviewQueueItem[]> {
     ),
     ...socialPostsRes.rows.map(
       (p): ReviewQueueItem => ({ kind: "social_post", tier: tierBySchedule(p.scheduled_for), createdAt: p.created_at, data: p })
+    ),
+    ...commsDraftsRes.rows.map(
+      (m): ReviewQueueItem => ({
+        kind: "comms_draft",
+        tier: m.tier,
+        createdAt: m.created_at,
+        data: {
+          id: m.id,
+          threadId: m.thread_id,
+          contactName: m.contact_name,
+          channel: m.channel,
+          body: m.body,
+          tier: m.tier,
+          createdAt: m.created_at,
+        },
+      })
     ),
   ];
 

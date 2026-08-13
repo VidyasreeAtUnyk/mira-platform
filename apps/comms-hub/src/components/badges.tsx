@@ -1,3 +1,11 @@
+'use client';
+
+// Needed explicitly now (was previously only ever imported from already-
+// 'use client' page files, which was enough to put it in the client
+// bundle without its own directive) -- now that src/app/page.tsx and
+// src/app/thread/[id]/page.tsx are Server Components (see
+// PROGRESS-integration.md), TimeAgo's hooks need this file to declare its
+// own client boundary rather than inherit one from its importer.
 import { useEffect, useState } from 'react';
 import { Mail, MessageCircle } from 'lucide-react';
 import type { Channel, MessageStatus, NotificationTier } from '@/types';

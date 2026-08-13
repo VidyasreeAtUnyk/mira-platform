@@ -7,13 +7,12 @@
 -- shared-*" is read-only from a module worktree, module-specific tables are
 -- added in the module's own directory, not by editing packages/shared-db).
 --
--- NOT applied anywhere in this build -- there is no live Supabase project
--- connected (no credentials exist in this repo, see .env.example and
--- PROGRESS-comms.md Blockers). The running app in this session reads/writes
--- src/lib/mock-data.ts in memory instead; this file defines the schema that
--- data layer is modeled after, so swapping to real Postgres later is a
--- storage-layer change, not a type/shape change. A human with real
--- Supabase access should review and apply this migration when ready.
+-- RESOLVED: applied to the local dev Postgres database (mira_staging_dev,
+-- see apps/comms-hub/.env.local) -- the app now reads/writes these tables
+-- directly (src/lib/data/comms.ts), replacing the earlier in-memory
+-- src/lib/mock-data.ts store (deleted). A human with real Supabase/prod
+-- access should still review this migration before applying it to a
+-- production project -- local dev application isn't a substitute for that.
 
 -- ============================================================
 -- message_threads

@@ -308,9 +308,10 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         </section>
 
         {/* Review queue -- getReviewQueue(), merged across proposals/ai_suggestions
-            (Phase 0) and social_posts (apps/social-assistant). Real pending items
-            that already exist today, not Agent Core's future automated
-            suggestions -- see the note below the heading. */}
+            (Phase 0), social_posts (apps/social-assistant), and pending message
+            drafts (apps/comms-hub). Real pending items that already exist today,
+            not Agent Core's future automated suggestions -- see the note below
+            the heading. */}
         <section className="mb-8">
           <div className="mb-3 flex items-center gap-2">
             <Inbox className="h-4 w-4 text-primary" />
@@ -334,7 +335,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
                   key={`${item.kind}-${item.data.id}`}
                   item={item}
                   leadName={
-                    item.kind !== "social_post" && item.data.lead_id
+                    (item.kind === "proposal" || item.kind === "suggestion") && item.data.lead_id
                       ? leadNamesById.get(item.data.lead_id)
                       : undefined
                   }
@@ -452,10 +453,14 @@ function ReviewQueueRow({ item, leadName }: { item: ReviewQueueItem; leadName?: 
     title = leadName ? `${titleCase(item.data.suggestion_type)} for ${leadName}` : titleCase(item.data.suggestion_type);
     subtitle = item.data.content ?? "";
     sourceLabel = "CRM suggestion";
-  } else {
+  } else if (item.kind === "social_post") {
     title = `${titleCase(item.data.kind)} -- ${item.data.platform}`;
     subtitle = item.data.caption;
     sourceLabel = item.data.brand_mode === "co_branded" ? `Social post -- co-branded (${item.data.developer_partner_name})` : "Social post -- own brand";
+  } else {
+    title = `${titleCase(item.data.channel)} draft for ${item.data.contactName}`;
+    subtitle = item.data.body;
+    sourceLabel = "Comms Hub draft";
   }
 
   return (

@@ -1,38 +1,38 @@
-'use client';
-
 /**
- * Thread detail view. Enforces `canViewThread()` here too, not just at the
- * inbox list level -- a viewer who guesses/bookmarks a thread URL they
- * shouldn't see (e.g. Marketing/Social hitting a lead-linked thread) gets
- * blocked at this layer independently of list filtering.
+ * Thread detail view -- now an async Server Component. Enforces
+ * `canViewThread()` here too, not just at the inbox list level -- a viewer
+ * who guesses/bookmarks a thread URL they shouldn't see (e.g.
+ * Marketing/Social hitting a lead-linked thread) gets blocked at this
+ * layer independently of list filtering.
  *
- * The reply box only ever calls `addReplyDraft`, which appends a
- * status: 'draft' Message -- there is no "Send" action anywhere on this
- * page, by design (see src/components/comms-store.tsx's header comment).
+ * RESOLVED (was a 'use client' page marking a thread read via a
+ * useEffect against src/components/comms-store.tsx's in-memory state, see
+ * PROGRESS-integration.md): markThreadRead now runs directly in this
+ * Server Component's render, a real Postgres UPDATE, no client effect
+ * needed. The reply box (src/components/reply-box.tsx) only ever calls
+ * addReplyDraftAction, which only ever writes status: 'draft'.
  */
-import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, ShieldAlert } from 'lucide-react';
-import { useCommsStore } from '@/components/comms-store';
+import { getCurrentViewer } from '@/lib/auth/viewer';
+import { listMessages, listThreads, markThreadRead } from '@/lib/data/comms';
 import { canViewThread, COMMS_ROLE_LABELS } from '@/lib/rbac';
 import { ChannelIcon, StatusBadge, TierBadge, TimeAgo } from '@/components/badges';
+import { ReplyBox } from '@/components/reply-box';
 import { cn } from '@/lib/utils';
 
-export default function ThreadDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const { viewer, threadById, messagesForThread, markThreadRead, addReplyDraft } = useCommsStore();
-  const [reply, setReply] = useState('');
-  const [savedNotice, setSavedNotice] = useState(false);
+export const revalidate = 0;
 
-  const thread = threadById(id);
+export default async function ThreadDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const [{ viewer }, threads, allMessages] = await Promise.all([getCurrentViewer(), listThreads(), listMessages()]);
+
+  const thread = threads.find((t) => t.id === id);
   const allowed = thread ? canViewThread(thread, viewer) : false;
 
-  useEffect(() => {
-    if (thread && allowed && thread.unread) {
-      markThreadRead(thread.id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thread?.id, allowed]);
+  if (thread && allowed && thread.unread) {
+    await markThreadRead(thread.id);
+  }
 
   if (!thread) {
     return (
@@ -51,9 +51,8 @@ export default function ThreadDetailPage({ params }: { params: Promise<{ id: str
         <ShieldAlert className="mx-auto mb-3 h-8 w-8 text-red-600" />
         <h1 className="text-lg font-semibold">Not visible to this role</h1>
         <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-          <span className="font-medium">{COMMS_ROLE_LABELS[viewer.role]}</span> does not have access to
-          this thread under comms-hub&apos;s RBAC rules (src/lib/rbac.ts). Switch viewer in the header to
-          confirm.
+          <span className="font-medium">{COMMS_ROLE_LABELS[viewer.role]}</span> does not have access to this thread
+          under comms-hub&apos;s RBAC rules (src/lib/rbac.ts). Switch viewer in the header to confirm.
         </p>
         <Link href="/" className="mt-4 inline-flex items-center gap-1 text-sm text-primary hover:underline">
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -63,15 +62,9 @@ export default function ThreadDetailPage({ params }: { params: Promise<{ id: str
     );
   }
 
-  const messages = messagesForThread(thread.id);
-
-  function handleSaveDraft() {
-    if (reply.trim().length === 0) return;
-    addReplyDraft(thread!.id, reply);
-    setReply('');
-    setSavedNotice(true);
-    setTimeout(() => setSavedNotice(false), 2500);
-  }
+  const messages = allMessages
+    .filter((m) => m.threadId === thread.id)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   return (
     <div>
@@ -119,33 +112,7 @@ export default function ThreadDetailPage({ params }: { params: Promise<{ id: str
         ))}
       </div>
 
-      <div className="rounded-lg border border-border bg-card p-3">
-        <label htmlFor="reply" className="mb-1 block text-xs font-medium text-muted-foreground">
-          Draft a reply ({thread.channel === 'whatsapp' ? 'WhatsApp' : 'Email'}) — saved as draft only,
-          never sent
-        </label>
-        <textarea
-          id="reply"
-          value={reply}
-          onChange={(e) => setReply(e.target.value)}
-          rows={3}
-          placeholder="Type a reply…"
-          className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-        />
-        <div className="mt-2 flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">
-            {savedNotice ? 'Saved as draft.' : 'No send path exists in this build — draft-and-hold by design.'}
-          </p>
-          <button
-            type="button"
-            onClick={handleSaveDraft}
-            disabled={reply.trim().length === 0}
-            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Save Draft
-          </button>
-        </div>
-      </div>
+      <ReplyBox threadId={thread.id} channel={thread.channel} />
     </div>
   );
 }
