@@ -33,3 +33,20 @@ create table if not exists meetings (
 );
 
 create index if not exists idx_meetings_starts_at on meetings(starts_at);
+
+-- Attendees -- real agents only (see src/lib/meetings.ts's header for why:
+-- "gets notified" only means something for someone who can actually log
+-- into this system; there is no live email/push-send infrastructure
+-- anywhere in this platform, and CLAUDE.md forbids sending anything live
+-- outside a review/approval flow this app doesn't have yet). External
+-- people stay on `meetings.with_name` as free text, same as before.
+create table if not exists meeting_attendees (
+  id uuid primary key default uuid_generate_v4(),
+  meeting_id uuid not null references meetings(id) on delete cascade,
+  agent_id uuid not null references agents(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (meeting_id, agent_id)
+);
+
+create index if not exists idx_meeting_attendees_meeting on meeting_attendees(meeting_id);
+create index if not exists idx_meeting_attendees_agent on meeting_attendees(agent_id);

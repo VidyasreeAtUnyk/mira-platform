@@ -5,10 +5,10 @@
  * screen and there was no better-fitting existing app for it.
  */
 import Link from "next/link";
-import { Plus, Video, MapPin } from "lucide-react";
+import { Plus, Video, MapPin, CalendarDays } from "lucide-react";
 import { NavPills } from "@/components/layout/nav-pills";
 import { Badge } from "@/components/ui/badge";
-import { listUpcomingMeetings, listPastMeetings, type Meeting } from "@/lib/meetings";
+import { listUpcomingMeetings, listPastMeetings, listAttendeesByMeeting, type Meeting } from "@/lib/meetings";
 import { getAgents } from "@/lib/queries";
 import { navItemsForRole, isDashboardRole, type DashboardRole } from "@/lib/roles";
 
@@ -25,6 +25,7 @@ export default async function MeetingsPage({ searchParams }: MeetingsPageProps) 
 
   const [upcoming, past, agents] = await Promise.all([listUpcomingMeetings(), listPastMeetings(10), getAgents()]);
   const agentNamesById = new Map(agents.map((a) => [a.id, a.name]));
+  const attendeesByMeeting = await listAttendeesByMeeting([...upcoming, ...past].map((m) => m.id));
 
   return (
     <div className="min-h-screen bg-background">
@@ -35,13 +36,22 @@ export default async function MeetingsPage({ searchParams }: MeetingsPageProps) 
               <h1 className="text-xl font-bold tracking-tight">Meetings</h1>
               <p className="mt-0.5 text-xs text-muted-foreground">Online or in person -- your own calendar entries, separate from the review queue.</p>
             </div>
-            <Link
-              href="/meetings/new"
-              className="flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              New meeting
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/meetings/calendar"
+                className="flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent"
+              >
+                <CalendarDays className="h-3.5 w-3.5" />
+                Calendar
+              </Link>
+              <Link
+                href="/meetings/new"
+                className="flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                New meeting
+              </Link>
+            </div>
           </div>
           <NavPills nav={nav} active="meetings" />
         </header>
@@ -53,7 +63,12 @@ export default async function MeetingsPage({ searchParams }: MeetingsPageProps) 
           ) : (
             <ul className="space-y-2.5">
               {upcoming.map((m) => (
-                <MeetingRow key={m.id} meeting={m} organizerName={m.organizer_agent_id ? agentNamesById.get(m.organizer_agent_id) : undefined} />
+                <MeetingRow
+                  key={m.id}
+                  meeting={m}
+                  organizerName={m.organizer_agent_id ? agentNamesById.get(m.organizer_agent_id) : undefined}
+                  attendees={attendeesByMeeting.get(m.id) ?? []}
+                />
               ))}
             </ul>
           )}
@@ -64,7 +79,12 @@ export default async function MeetingsPage({ searchParams }: MeetingsPageProps) 
             <h2 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wide">Past</h2>
             <ul className="space-y-2.5 opacity-70">
               {past.map((m) => (
-                <MeetingRow key={m.id} meeting={m} organizerName={m.organizer_agent_id ? agentNamesById.get(m.organizer_agent_id) : undefined} />
+                <MeetingRow
+                  key={m.id}
+                  meeting={m}
+                  organizerName={m.organizer_agent_id ? agentNamesById.get(m.organizer_agent_id) : undefined}
+                  attendees={attendeesByMeeting.get(m.id) ?? []}
+                />
               ))}
             </ul>
           </section>
@@ -74,8 +94,17 @@ export default async function MeetingsPage({ searchParams }: MeetingsPageProps) 
   );
 }
 
-function MeetingRow({ meeting, organizerName }: { meeting: Meeting; organizerName?: string }) {
+function MeetingRow({
+  meeting,
+  organizerName,
+  attendees,
+}: {
+  meeting: Meeting;
+  organizerName?: string;
+  attendees: { agentId: string; name: string }[];
+}) {
   const starts = new Date(meeting.starts_at);
+  const ends = meeting.ends_at ? new Date(meeting.ends_at) : null;
   return (
     <li className="rounded-lg border border-border bg-card px-3.5 py-3 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -104,12 +133,17 @@ function MeetingRow({ meeting, organizerName }: { meeting: Meeting; organizerNam
               meeting.location_value
             )}
           </p>
-          {organizerName && <p className="mt-0.5 text-[11px] text-muted-foreground/70">Organized by {organizerName}</p>}
+          <p className="mt-0.5 text-[11px] text-muted-foreground/70">
+            {organizerName && `Organized by ${organizerName}`}
+            {organizerName && attendees.length > 0 && " · "}
+            {attendees.length > 0 && `With ${attendees.map((a) => a.name).join(", ")}`}
+          </p>
         </div>
         <div className="shrink-0 text-right text-xs text-muted-foreground">
           {starts.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
           <br />
           {starts.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+          {ends && ` – ${ends.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`}
         </div>
       </div>
       {meeting.notes && <p className="mt-2 text-xs text-muted-foreground">{meeting.notes}</p>}
