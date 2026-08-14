@@ -12,7 +12,7 @@ import { AGENT_ROLES, ROLE_LABELS, type DashboardRole } from "@/lib/roles";
 export function RoleSwitcher({ current }: { current: DashboardRole }) {
   return (
     <div className="rounded-lg border border-dashed border-warning/50 bg-warning/10 px-3 py-2 text-xs">
-      <p className="mb-1.5 font-medium text-warning-foreground">
+      <p className="mb-1.5 font-medium text-warning">
         Dev preview only -- no auth wired up yet. Viewing as:
       </p>
       <div className="flex flex-wrap gap-1.5">

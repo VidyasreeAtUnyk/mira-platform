@@ -4,7 +4,7 @@ import type { HTMLAttributes } from "react";
 const VARIANTS = {
   default: "bg-secondary text-secondary-foreground",
   primary: "bg-primary/10 text-primary",
-  warning: "bg-warning/20 text-warning-foreground",
+  warning: "bg-warning/20 text-warning",
   destructive: "bg-destructive/10 text-destructive",
   outline: "border border-border text-muted-foreground",
 } as const;

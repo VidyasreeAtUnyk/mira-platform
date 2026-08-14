@@ -7,14 +7,14 @@ import type { PlannedItem } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 const MOOD_STYLE: Record<Brief["mood"], { bg: string; text: string; emoji: string }> = {
-  strong: { bg: "bg-emerald-50 dark:bg-emerald-950/40", text: "text-emerald-700 dark:text-emerald-400", emoji: "📈" },
+  strong: { bg: "bg-success/10", text: "text-success", emoji: "📈" },
   steady: { bg: "bg-primary/5", text: "text-primary", emoji: "🙂" },
-  busy: { bg: "bg-warning/10", text: "text-warning-foreground", emoji: "⚡" },
+  busy: { bg: "bg-warning/10", text: "text-warning", emoji: "⚡" },
   quiet: { bg: "bg-muted", text: "text-muted-foreground", emoji: "☕" },
 };
 
 const TIER_DOT: Record<NotificationTier, string> = {
-  urgent: "bg-red-500",
+  urgent: "bg-destructive",
   today: "bg-warning",
   fyi: "bg-muted-foreground/40",
 };
