@@ -10,11 +10,11 @@ export default async function ListingsPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold">Listings</h1>
+      <h1 className="mb-4 text-xl font-semibold text-foreground">Listings</h1>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
+        <table className="w-full border-collapse text-sm text-foreground">
           <thead>
-            <tr className="border-b border-neutral-200 text-left dark:border-neutral-800">
+            <tr className="border-b border-border text-left">
               <th className="p-2">Address</th>
               <th className="p-2">Area</th>
               <th className="p-2">Type</th>
@@ -25,7 +25,7 @@ export default async function ListingsPage() {
           </thead>
           <tbody>
             {listings.map((l) => (
-              <tr key={l.id} className="border-b border-neutral-100 dark:border-neutral-900">
+              <tr key={l.id} className="border-b border-border/60">
                 <td className="p-2">{l.address}</td>
                 <td className="p-2">{l.area}</td>
                 <td className="p-2">{l.type}</td>
@@ -36,7 +36,7 @@ export default async function ListingsPage() {
             ))}
             {listings.length === 0 && (
               <tr>
-                <td className="p-2 text-neutral-400" colSpan={6}>
+                <td className="p-2 text-muted-foreground" colSpan={6}>
                   No listings yet.
                 </td>
               </tr>

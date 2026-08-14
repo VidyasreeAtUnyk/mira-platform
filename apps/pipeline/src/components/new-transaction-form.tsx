@@ -52,16 +52,16 @@ export function NewTransactionForm({ leads, agents }: NewTransactionFormProps) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-      {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+    <form onSubmit={submit} className="space-y-4 rounded-lg border border-border bg-card p-4">
+      {error && <p className="text-xs text-destructive">{error}</p>}
 
       <div>
-        <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Lead *</label>
+        <label className="mb-1 block text-xs font-medium text-muted-foreground">Lead *</label>
         <select
           value={leadId}
           onChange={(e) => setLeadId(e.target.value)}
           required
-          className="w-full rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+          className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground"
         >
           <option value="">Select a lead…</option>
           {leads.map((l) => (
@@ -73,11 +73,11 @@ export function NewTransactionForm({ leads, agents }: NewTransactionFormProps) {
       </div>
 
       <div>
-        <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Agent (optional)</label>
+        <label className="mb-1 block text-xs font-medium text-muted-foreground">Agent (optional)</label>
         <select
           value={agentId}
           onChange={(e) => setAgentId(e.target.value)}
-          className="w-full rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+          className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground"
         >
           <option value="">Unassigned</option>
           {agents.map((a) => (
@@ -89,7 +89,7 @@ export function NewTransactionForm({ leads, agents }: NewTransactionFormProps) {
       </div>
 
       <div>
-        <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Offer price (optional)</label>
+        <label className="mb-1 block text-xs font-medium text-muted-foreground">Offer price (optional)</label>
         <input
           type="number"
           min="0"
@@ -97,24 +97,24 @@ export function NewTransactionForm({ leads, agents }: NewTransactionFormProps) {
           value={offerPrice}
           onChange={(e) => setOfferPrice(e.target.value)}
           placeholder="AED"
-          className="w-full rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+          className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground"
         />
       </div>
 
       <div>
-        <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Notes (optional)</label>
+        <label className="mb-1 block text-xs font-medium text-muted-foreground">Notes (optional)</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
-          className="w-full rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+          className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground"
         />
       </div>
 
       <button
         type="submit"
         disabled={busy}
-        className="w-full rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+        className="w-full rounded bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
       >
         {busy ? "Creating…" : "Create deal"}
       </button>

@@ -24,6 +24,8 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
   --color-border: var(--border);
   --color-ring: var(--ring);
   --radius-sm: calc(var(--radius) * 0.6);
@@ -32,65 +34,80 @@
   --radius-xl: calc(var(--radius) * 1.4);
 }
 
+/* ============================================================
+   MIRA Agam brand tokens (brand-kit/BRAND-KIT.md) -- same palette
+   applied across dashboard/trackers/comms-hub/pipeline so the product
+   reads as one system instead of each module's own ad hoc theme. Light
+   theme is a warm-neutral + deep-gold complement (not an inversion) to
+   the brand's native dark identity, since these are daytime-use
+   operational apps; dark theme uses the brand's own ink/gold values
+   directly. See PROGRESS-integration.md for the unification pass.
+   ============================================================ */
 @layer base {
   :root {
-    --primary: oklch(0.42 0.18 255);
-    --primary-foreground: oklch(0.98 0 0);
+    --primary: #9C7935;
+    --primary-foreground: #FBF8F2;
 
-    --background: oklch(0.985 0.003 247);
-    --foreground: oklch(0.13 0.02 255);
+    --background: #FAF7F0;
+    --foreground: #17262B;
 
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.13 0.02 255);
+    --card: #FFFFFF;
+    --card-foreground: #17262B;
 
-    --secondary: oklch(0.94 0.01 255);
-    --secondary-foreground: oklch(0.28 0.06 255);
+    --secondary: #F1EAD9;
+    --secondary-foreground: #4A4235;
 
-    --muted: oklch(0.95 0.005 247);
-    --muted-foreground: oklch(0.5 0.02 255);
+    --muted: #F0EAD9;
+    --muted-foreground: #5B6B66;
 
-    --accent: oklch(0.94 0.015 255);
-    --accent-foreground: oklch(0.28 0.06 255);
+    --accent: #F1EAD9;
+    --accent-foreground: #4A4235;
 
-    --destructive: oklch(0.577 0.245 27.325);
-    --destructive-foreground: oklch(0.98 0 0);
+    --destructive: #A94439;
+    --destructive-foreground: #FBF8F2;
 
-    --warning: oklch(0.83 0.14 85);
-    --warning-foreground: oklch(0.28 0.1 85);
+    --warning: #9A6B24;
+    --warning-foreground: #FBF8F2;
 
-    --border: oklch(0.9 0.01 247);
-    --ring: oklch(0.42 0.18 255);
+    --success: #3F7A44;
+    --success-foreground: #FBF8F2;
+
+    --border: #E6DDC8;
+    --ring: #9C7935;
 
     --radius: 0.65rem;
   }
 
   :root.dark {
-    --primary: oklch(0.72 0.15 255);
-    --primary-foreground: oklch(0.13 0.02 255);
+    --primary: #C9A24C;
+    --primary-foreground: #17262B;
 
-    --background: oklch(0.16 0.015 255);
-    --foreground: oklch(0.96 0.005 247);
+    --background: #0B1B20;
+    --foreground: #F2ECE0;
 
-    --card: oklch(0.2 0.015 255);
-    --card-foreground: oklch(0.96 0.005 247);
+    --card: #142832;
+    --card-foreground: #F2ECE0;
 
-    --secondary: oklch(0.26 0.02 255);
-    --secondary-foreground: oklch(0.9 0.01 247);
+    --secondary: #1B3540;
+    --secondary-foreground: #F2ECE0;
 
-    --muted: oklch(0.24 0.015 255);
-    --muted-foreground: oklch(0.65 0.015 247);
+    --muted: #16303A;
+    --muted-foreground: #C9C1AE;
 
-    --accent: oklch(0.28 0.03 255);
-    --accent-foreground: oklch(0.9 0.01 247);
+    --accent: #1B3540;
+    --accent-foreground: #F2ECE0;
 
-    --destructive: oklch(0.62 0.22 27);
-    --destructive-foreground: oklch(0.98 0 0);
+    --destructive: #E08A7D;
+    --destructive-foreground: #17262B;
 
-    --warning: oklch(0.75 0.14 85);
-    --warning-foreground: oklch(0.2 0.08 85);
+    --warning: #E0A458;
+    --warning-foreground: #17262B;
 
-    --border: oklch(0.3 0.02 255);
-    --ring: oklch(0.72 0.15 255);
+    --success: #7FAE8C;
+    --success-foreground: #0B1B20;
+
+    --border: rgba(201, 162, 76, 0.22);
+    --ring: #C9A24C;
   }
 
   * {

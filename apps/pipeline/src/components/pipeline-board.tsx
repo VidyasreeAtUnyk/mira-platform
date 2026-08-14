@@ -83,7 +83,7 @@ export function PipelineBoard({ transactions }: PipelineBoardProps) {
   return (
     <div>
       {errorMessage && (
-        <div className="mb-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+        <div className="mb-3 rounded border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
           {errorMessage}
         </div>
       )}
@@ -97,8 +97,8 @@ export function PipelineBoard({ transactions }: PipelineBoardProps) {
               key={stage}
               className={`min-w-64 flex-shrink-0 rounded-lg border transition-colors ${
                 dragOverStage === stage && isValidDropTarget
-                  ? "border-blue-400 bg-blue-50 dark:border-blue-700 dark:bg-blue-950"
-                  : "border-neutral-200 dark:border-neutral-800"
+                  ? "border-primary bg-primary/10"
+                  : "border-border"
               } ${isDragging && !isValidDropTarget ? "opacity-40" : ""}`}
               onDragOver={(e) => {
                 if (!isValidDropTarget) return;
@@ -113,7 +113,7 @@ export function PipelineBoard({ transactions }: PipelineBoardProps) {
                 if (id && fromStage) handleDrop(stage, id, fromStage);
               }}
             >
-              <div className="border-b border-neutral-200 px-3 py-2 text-sm font-medium dark:border-neutral-800">
+              <div className="border-b border-border px-3 py-2 text-sm font-medium">
                 {STAGE_LABELS[stage]} ({byStage[stage].length})
               </div>
               <div className="flex flex-col gap-2 p-3">
@@ -131,19 +131,19 @@ export function PipelineBoard({ transactions }: PipelineBoardProps) {
                       setDraggingStage(null);
                       setDragOverStage(null);
                     }}
-                    className={`block rounded border border-neutral-200 p-2 text-xs hover:border-blue-300 hover:bg-blue-50/50 dark:border-neutral-800 dark:hover:border-blue-800 dark:hover:bg-blue-950/40 ${
+                    className={`block rounded border border-border bg-card p-2 text-xs hover:border-primary/40 hover:bg-primary/5 ${
                       busyId === t.id ? "opacity-50" : ""
                     } ${!isTerminalCard(stage) ? "cursor-grab active:cursor-grabbing" : ""}`}
                   >
-                    <div className="font-medium text-neutral-800 dark:text-neutral-100">
+                    <div className="font-medium text-foreground">
                       {t.lead_name ?? "(lead not found)"}
                     </div>
-                    {t.lead_phone && <div className="text-neutral-500">{t.lead_phone}</div>}
+                    {t.lead_phone && <div className="text-muted-foreground">{t.lead_phone}</div>}
                     {t.offer_price != null && <div>Offer: AED {t.offer_price.toLocaleString()}</div>}
                     {t.expected_closing_date && <div>Closing: {t.expected_closing_date}</div>}
                   </Link>
                 ))}
-                {byStage[stage].length === 0 && <div className="text-xs text-neutral-400">No deals</div>}
+                {byStage[stage].length === 0 && <div className="text-xs text-muted-foreground/70">No deals</div>}
               </div>
             </div>
           );
@@ -152,21 +152,21 @@ export function PipelineBoard({ transactions }: PipelineBoardProps) {
 
       {pendingMove && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-lg border border-neutral-200 bg-white p-4 shadow-lg dark:border-neutral-800 dark:bg-neutral-900">
-            <h2 className="text-sm font-semibold">Mark as Closed Lost</h2>
-            <p className="mt-1 text-xs text-neutral-500">A reason is required before this deal can move to Closed Lost.</p>
+          <div className="w-full max-w-sm rounded-lg border border-border bg-card p-4 shadow-lg">
+            <h2 className="text-sm font-semibold text-foreground">Mark as Closed Lost</h2>
+            <p className="mt-1 text-xs text-muted-foreground">A reason is required before this deal can move to Closed Lost.</p>
             <textarea
               autoFocus
               value={lostReason}
               onChange={(e) => setLostReason(e.target.value)}
               placeholder="e.g. Buyer's financing fell through"
               rows={3}
-              className="mt-3 w-full rounded border border-neutral-300 p-2 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+              className="mt-3 w-full rounded border border-border bg-background p-2 text-sm text-foreground"
             />
             <div className="mt-3 flex justify-end gap-2">
               <button
                 onClick={() => setPendingMove(null)}
-                className="rounded px-3 py-1.5 text-xs text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent"
               >
                 Cancel
               </button>
@@ -177,7 +177,7 @@ export function PipelineBoard({ transactions }: PipelineBoardProps) {
                   setPendingMove(null);
                   if (move) void applyTransition(move.id, move.toStage, { lost_reason: lostReason.trim() });
                 }}
-                className="rounded bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-40"
+                className="rounded bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-40"
               >
                 Confirm
               </button>

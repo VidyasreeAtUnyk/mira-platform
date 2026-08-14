@@ -17,8 +17,8 @@ export default async function NewTransactionPage() {
 
   return (
     <div className="mx-auto max-w-lg">
-      <h1 className="mb-1 text-xl font-semibold">New Deal</h1>
-      <p className="mb-4 text-xs text-neutral-500">Starts in the pipeline's entry stage, "Showing".</p>
+      <h1 className="mb-1 text-xl font-semibold text-foreground">New Deal</h1>
+      <p className="mb-4 text-xs text-muted-foreground">Starts in the pipeline's entry stage, "Showing".</p>
       <NewTransactionForm leads={leads} agents={agents} />
     </div>
   );

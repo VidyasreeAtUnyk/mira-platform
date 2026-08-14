@@ -27,74 +27,74 @@ export default async function TransactionDetailPage({ params }: { params: Promis
 
   return (
     <div className="mx-auto max-w-2xl">
-      <Link href="/" className="text-xs text-neutral-500 hover:underline">
+      <Link href="/" className="text-xs text-muted-foreground hover:underline">
         &larr; Back to board
       </Link>
 
       <div className="mt-3 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">{transaction.lead_name ?? "(lead not found)"}</h1>
-          <p className="mt-0.5 text-sm text-neutral-500">
+          <h1 className="text-xl font-semibold text-foreground">{transaction.lead_name ?? "(lead not found)"}</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
             {transaction.lead_phone}
             {transaction.lead_email ? ` · ${transaction.lead_email}` : ""}
           </p>
         </div>
-        <span className="shrink-0 rounded-full border border-neutral-300 px-3 py-1 text-xs font-medium dark:border-neutral-700">
+        <span className="shrink-0 rounded-full border border-border px-3 py-1 text-xs font-medium text-foreground">
           {STAGE_LABELS[transaction.stage]}
         </span>
       </div>
 
-      <dl className="mt-6 grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
+      <dl className="mt-6 grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border border-border bg-card p-4 text-sm text-foreground">
         <div>
-          <dt className="text-xs text-neutral-500">Offer price</dt>
+          <dt className="text-xs text-muted-foreground">Offer price</dt>
           <dd>{transaction.offer_price != null ? `AED ${transaction.offer_price.toLocaleString()}` : "—"}</dd>
         </div>
         <div>
-          <dt className="text-xs text-neutral-500">Contract price</dt>
+          <dt className="text-xs text-muted-foreground">Contract price</dt>
           <dd>{transaction.contract_price != null ? `AED ${transaction.contract_price.toLocaleString()}` : "—"}</dd>
         </div>
         <div>
-          <dt className="text-xs text-neutral-500">Expected closing</dt>
+          <dt className="text-xs text-muted-foreground">Expected closing</dt>
           <dd>{transaction.expected_closing_date ?? "—"}</dd>
         </div>
         <div>
-          <dt className="text-xs text-neutral-500">Closed at</dt>
+          <dt className="text-xs text-muted-foreground">Closed at</dt>
           <dd>{transaction.closed_at ? new Date(transaction.closed_at).toLocaleDateString() : "—"}</dd>
         </div>
         {transaction.property_id && (
           <div className="col-span-2">
-            <dt className="text-xs text-neutral-500">Property</dt>
+            <dt className="text-xs text-muted-foreground">Property</dt>
             <dd className="font-mono text-xs">{transaction.property_id}</dd>
           </div>
         )}
         {transaction.lost_reason && (
           <div className="col-span-2">
-            <dt className="text-xs text-neutral-500">Lost reason</dt>
+            <dt className="text-xs text-muted-foreground">Lost reason</dt>
             <dd>{transaction.lost_reason}</dd>
           </div>
         )}
         {transaction.notes && (
           <div className="col-span-2">
-            <dt className="text-xs text-neutral-500">Notes</dt>
+            <dt className="text-xs text-muted-foreground">Notes</dt>
             <dd>{transaction.notes}</dd>
           </div>
         )}
       </dl>
 
       <div className="mt-6">
-        <h2 className="mb-2 text-sm font-semibold">Change stage</h2>
+        <h2 className="mb-2 text-sm font-semibold text-foreground">Change stage</h2>
         <StageChanger transactionId={transaction.id} currentStage={transaction.stage} />
       </div>
 
       <div className="mt-8">
-        <h2 className="mb-2 text-sm font-semibold">History</h2>
-        <ol className="space-y-2 border-l border-neutral-200 pl-4 dark:border-neutral-800">
+        <h2 className="mb-2 text-sm font-semibold text-foreground">History</h2>
+        <ol className="space-y-2 border-l border-border pl-4">
           {history.map((h) => (
-            <li key={h.id} className="text-sm">
+            <li key={h.id} className="text-sm text-foreground">
               <div>
                 {h.from_stage ? `${STAGE_LABELS[h.from_stage]} → ${STAGE_LABELS[h.to_stage]}` : `Created in ${STAGE_LABELS[h.to_stage]}`}
               </div>
-              <div className="text-xs text-neutral-500">
+              <div className="text-xs text-muted-foreground">
                 {new Date(h.changed_at).toLocaleString()}
                 {h.note ? ` · ${h.note}` : ""}
               </div>

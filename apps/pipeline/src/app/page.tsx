@@ -29,12 +29,12 @@ export default async function Home() {
         <h1 className="text-xl font-semibold">Transaction Pipeline</h1>
         <Link
           href="/transactions/new"
-          className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+          className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
         >
           New Deal
         </Link>
       </div>
-      <p className="mb-4 text-xs text-neutral-500">Drag a card to a legal next stage, or click it for full details and history.</p>
+      <p className="mb-4 text-xs text-muted-foreground">Drag a card to a legal next stage, or click it for full details and history.</p>
       <PipelineBoard transactions={transactions} />
     </div>
   );

@@ -29,7 +29,7 @@ export function StageChanger({ transactionId, currentStage }: StageChangerProps)
   const [error, setError] = useState<string | null>(null);
 
   if (nextStages.length === 0) {
-    return <p className="text-sm text-neutral-500">This deal is closed -- no further transitions.</p>;
+    return <p className="text-sm text-muted-foreground">This deal is closed -- no further transitions.</p>;
   }
 
   async function submit() {
@@ -64,13 +64,13 @@ export function StageChanger({ transactionId, currentStage }: StageChangerProps)
   }
 
   return (
-    <div className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
-      {error && <p className="mb-2 text-xs text-red-600 dark:text-red-400">{error}</p>}
+    <div className="rounded-lg border border-border p-3">
+      {error && <p className="mb-2 text-xs text-destructive">{error}</p>}
       <div className="flex flex-wrap items-center gap-2">
         <select
           value={selected}
           onChange={(e) => setSelected(e.target.value as PipelineStage | "")}
-          className="rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+          className="rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground"
         >
           <option value="">Move to…</option>
           {nextStages.map((s) => (
@@ -84,13 +84,13 @@ export function StageChanger({ transactionId, currentStage }: StageChangerProps)
             value={lostReason}
             onChange={(e) => setLostReason(e.target.value)}
             placeholder="Reason (required)"
-            className="min-w-48 flex-1 rounded border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+            className="min-w-48 flex-1 rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground"
           />
         )}
         <button
           onClick={submit}
           disabled={!selected || busy}
-          className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+          className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
         >
           {busy ? "Saving…" : "Confirm"}
         </button>

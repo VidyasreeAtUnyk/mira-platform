@@ -16,11 +16,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             at this app's own root (was a sub-route + redirect, see
             src/app/page.tsx's header comment for why that broke under
             Multi-Zones). */}
-        <nav className="flex gap-4 border-b border-neutral-200 px-6 py-3 text-sm dark:border-neutral-800">
-          <a href="/pipeline" className="font-medium hover:underline">
+        <nav className="flex gap-4 border-b border-border px-6 py-3 text-sm">
+          <a href="/pipeline" className="font-medium text-foreground hover:underline">
             Pipeline
           </a>
-          <a href="/pipeline/listings" className="font-medium hover:underline">
+          <a href="/pipeline/listings" className="font-medium text-foreground hover:underline">
             Listings
           </a>
         </nav>

@@ -45,91 +45,93 @@
 }
 
 /* ============================================================
-   Mira Trackers — Dubai Blue (same brand tokens as apps/crm)
+   MIRA Agam brand tokens (brand-kit/BRAND-KIT.md) -- same palette as
+   apps/dashboard/comms-hub/pipeline, see that app's globals.css for the
+   full unification note. PROGRESS-integration.md has the pass writeup.
    ============================================================ */
 @layer base {
   :root {
-    --primary: oklch(0.42 0.18 255);
-    --primary-foreground: oklch(0.98 0 0);
+    --primary: #9C7935;
+    --primary-foreground: #FBF8F2;
 
-    --background: oklch(0.985 0.003 247);
-    --foreground: oklch(0.13 0.02 255);
+    --background: #FAF7F0;
+    --foreground: #17262B;
 
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.13 0.02 255);
+    --card: #FFFFFF;
+    --card-foreground: #17262B;
 
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.13 0.02 255);
+    --popover: #FFFFFF;
+    --popover-foreground: #17262B;
 
-    --secondary: oklch(0.94 0.01 255);
-    --secondary-foreground: oklch(0.28 0.06 255);
+    --secondary: #F1EAD9;
+    --secondary-foreground: #4A4235;
 
-    --muted: oklch(0.95 0.005 247);
-    --muted-foreground: oklch(0.50 0.02 255);
+    --muted: #F0EAD9;
+    --muted-foreground: #5B6B66;
 
-    --accent: oklch(0.94 0.015 255);
-    --accent-foreground: oklch(0.28 0.06 255);
+    --accent: #F1EAD9;
+    --accent-foreground: #4A4235;
 
-    --destructive: oklch(0.577 0.245 27.325);
-    --destructive-foreground: oklch(0.98 0 0);
+    --destructive: #A94439;
+    --destructive-foreground: #FBF8F2;
 
-    --success: oklch(0.6 0.15 145);
-    --success-foreground: oklch(0.98 0 0);
+    --success: #3F7A44;
+    --success-foreground: #FBF8F2;
 
-    --border: oklch(0.90 0.01 247);
-    --input: oklch(0.90 0.01 247);
-    --ring: oklch(0.42 0.18 255);
+    --border: #E6DDC8;
+    --input: #E6DDC8;
+    --ring: #9C7935;
 
     --radius: 0.625rem;
 
-    --sidebar: oklch(0.17 0.04 255);
-    --sidebar-foreground: oklch(0.92 0.01 255);
-    --sidebar-primary: oklch(0.55 0.18 255);
-    --sidebar-primary-foreground: oklch(0.98 0 0);
-    --sidebar-accent: oklch(0.24 0.05 255);
-    --sidebar-accent-foreground: oklch(0.92 0.01 255);
-    --sidebar-border: oklch(0.28 0.04 255);
+    --sidebar: #0B1B20;
+    --sidebar-foreground: #F2ECE0;
+    --sidebar-primary: #C9A24C;
+    --sidebar-primary-foreground: #17262B;
+    --sidebar-accent: #142832;
+    --sidebar-accent-foreground: #F2ECE0;
+    --sidebar-border: rgba(201, 162, 76, 0.22);
   }
 
   .dark {
-    --primary: oklch(0.60 0.18 255);
-    --primary-foreground: oklch(0.98 0 0);
+    --primary: #C9A24C;
+    --primary-foreground: #17262B;
 
-    --background: oklch(0.13 0.02 255);
-    --foreground: oklch(0.95 0.01 255);
+    --background: #0B1B20;
+    --foreground: #F2ECE0;
 
-    --card: oklch(0.18 0.03 255);
-    --card-foreground: oklch(0.95 0.01 255);
+    --card: #142832;
+    --card-foreground: #F2ECE0;
 
-    --popover: oklch(0.18 0.03 255);
-    --popover-foreground: oklch(0.95 0.01 255);
+    --popover: #142832;
+    --popover-foreground: #F2ECE0;
 
-    --secondary: oklch(0.22 0.03 255);
-    --secondary-foreground: oklch(0.95 0.01 255);
+    --secondary: #1B3540;
+    --secondary-foreground: #F2ECE0;
 
-    --muted: oklch(0.22 0.03 255);
-    --muted-foreground: oklch(0.65 0.02 255);
+    --muted: #16303A;
+    --muted-foreground: #C9C1AE;
 
-    --accent: oklch(0.24 0.04 255);
-    --accent-foreground: oklch(0.95 0.01 255);
+    --accent: #1B3540;
+    --accent-foreground: #F2ECE0;
 
-    --destructive: oklch(0.704 0.191 22.216);
-    --destructive-foreground: oklch(0.98 0 0);
+    --destructive: #E08A7D;
+    --destructive-foreground: #17262B;
 
-    --success: oklch(0.7 0.15 145);
-    --success-foreground: oklch(0.13 0.02 255);
+    --success: #7FAE8C;
+    --success-foreground: #0B1B20;
 
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 12%);
-    --ring: oklch(0.60 0.18 255);
+    --border: rgba(201, 162, 76, 0.18);
+    --input: rgba(201, 162, 76, 0.18);
+    --ring: #C9A24C;
 
-    --sidebar: oklch(0.12 0.03 255);
-    --sidebar-foreground: oklch(0.92 0.01 255);
-    --sidebar-primary: oklch(0.60 0.18 255);
-    --sidebar-primary-foreground: oklch(0.98 0 0);
-    --sidebar-accent: oklch(0.20 0.04 255);
-    --sidebar-accent-foreground: oklch(0.92 0.01 255);
-    --sidebar-border: oklch(1 0 0 / 8%);
+    --sidebar: #060F12;
+    --sidebar-foreground: #F2ECE0;
+    --sidebar-primary: #C9A24C;
+    --sidebar-primary-foreground: #17262B;
+    --sidebar-accent: #0F2129;
+    --sidebar-accent-foreground: #F2ECE0;
+    --sidebar-border: rgba(201, 162, 76, 0.14);
   }
 
   * {
