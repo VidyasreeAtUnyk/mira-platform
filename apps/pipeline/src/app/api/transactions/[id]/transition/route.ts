@@ -3,10 +3,11 @@ import { z } from "zod";
 import { getDb, ready } from "@/lib/db";
 import { transitionTransaction } from "@/lib/transactions";
 import { IllegalStageTransitionError, PIPELINE_STAGES } from "@/lib/stage-machine";
+import { pgUuid } from "@/lib/validation";
 
 const transitionSchema = z.object({
   to_stage: z.enum(PIPELINE_STAGES),
-  changed_by: z.string().uuid().optional(),
+  changed_by: pgUuid.optional(),
   note: z.string().optional(),
   lost_reason: z.string().optional(),
   offer_price: z.number().positive().optional(),

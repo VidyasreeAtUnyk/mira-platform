@@ -3,11 +3,12 @@ import { z } from "zod";
 import { getDb, ready } from "@/lib/db";
 import { createTransaction, listTransactions } from "@/lib/transactions";
 import { PIPELINE_STAGES } from "@/lib/stage-machine";
+import { pgUuid } from "@/lib/validation";
 
 const createSchema = z.object({
-  lead_id: z.string().uuid(),
-  property_id: z.string().uuid().optional(),
-  agent_id: z.string().uuid().optional(),
+  lead_id: pgUuid,
+  property_id: pgUuid.optional(),
+  agent_id: pgUuid.optional(),
   offer_price: z.number().positive().optional(),
   notes: z.string().optional(),
 });

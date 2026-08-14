@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getDb, ready } from "@/lib/db";
 import { listTransactionsWithLead } from "@/lib/transactions";
 import { PipelineBoard } from "@/components/pipeline-board";
@@ -24,7 +25,15 @@ export default async function Home() {
 
   return (
     <div>
-      <h1 className="mb-1 text-xl font-semibold">Transaction Pipeline</h1>
+      <div className="mb-1 flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Transaction Pipeline</h1>
+        <Link
+          href="/transactions/new"
+          className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+        >
+          New Deal
+        </Link>
+      </div>
       <p className="mb-4 text-xs text-neutral-500">Drag a card to a legal next stage, or click it for full details and history.</p>
       <PipelineBoard transactions={transactions} />
     </div>
