@@ -36,7 +36,8 @@ export type ModuleKey =
   | "financials"
   | "social"
   | "trackers"
-  | "comms";
+  | "comms"
+  | "meetings";
 
 export interface NavItem {
   key: ModuleKey;
@@ -52,24 +53,39 @@ export interface NavItem {
   status: "live" | "planned";
   /** Path to link to when status is "live" -- undefined when "planned" (nothing to link to). */
   href?: string;
+  /**
+   * "cross" items are a different app entirely (Next.js Multi-Zones), so
+   * the nav renders a plain <a> for them (see src/app/page.tsx) -- not
+   * basePath-aware, and shouldn't be. "same" items (today, meetings) are
+   * routes inside this app itself and use next/link's Link instead.
+   */
+  zone: "same" | "cross";
 }
 
 const ALL_NAV_ITEMS: NavItem[] = [
-  { key: "today", label: "Today", status: "live", href: "/" },
-  { key: "pipeline", label: "Pipeline & Leads", status: "live", href: "/pipeline" },
-  { key: "financials", label: "Financials", status: "planned" },
-  { key: "social", label: "Social & Marketing", status: "live", href: "/social" },
-  { key: "trackers", label: "Trackers", status: "live", href: "/trackers" },
-  { key: "comms", label: "Comms Hub", status: "live", href: "/comms" },
+  { key: "today", label: "Today", status: "live", href: "/", zone: "same" },
+  { key: "meetings", label: "Meetings", status: "live", href: "/meetings", zone: "same" },
+  { key: "pipeline", label: "Pipeline & Leads", status: "live", href: "/pipeline", zone: "cross" },
+  { key: "financials", label: "Financials", status: "planned", zone: "cross" },
+  { key: "social", label: "Social & Marketing", status: "live", href: "/social", zone: "cross" },
+  { key: "trackers", label: "Trackers", status: "live", href: "/trackers", zone: "cross" },
+  { key: "comms", label: "Comms Hub", status: "live", href: "/comms", zone: "cross" },
 ];
 
-/** Direct translation of SPEC.md's RBAC "Sees" column. */
+/**
+ * Direct translation of SPEC.md's RBAC "Sees" column, plus "meetings" --
+ * a new concept SPEC.md doesn't cover, given the same visibility as the
+ * other operational modules (owner_coo/senior_agent/junior_agent/
+ * admin_ops already see pipeline/comms-shaped work; marketing_social and
+ * finance stay scoped to just their own module, matching their existing
+ * narrow "Sees" entries).
+ */
 const VISIBLE_MODULES: Record<DashboardRole, ModuleKey[]> = {
-  owner_coo: ["today", "pipeline", "financials", "social", "trackers", "comms"],
-  senior_agent: ["today", "pipeline", "comms"],
-  junior_agent: ["today", "pipeline", "comms"],
+  owner_coo: ["today", "meetings", "pipeline", "financials", "social", "trackers", "comms"],
+  senior_agent: ["today", "meetings", "pipeline", "comms"],
+  junior_agent: ["today", "meetings", "pipeline", "comms"],
   marketing_social: ["today", "social"],
-  admin_ops: ["today", "trackers", "comms"],
+  admin_ops: ["today", "meetings", "trackers", "comms"],
   finance: ["today", "financials"],
 };
 

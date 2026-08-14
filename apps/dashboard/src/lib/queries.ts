@@ -9,6 +9,7 @@
  * which is Agent Core's, not the dashboard's, to implement).
  */
 import { getDb } from "./db";
+import { listMeetingsInNextDays } from "./meetings";
 import type {
   Agent,
   AISuggestion,
@@ -334,7 +335,7 @@ export interface PlannedItem {
  */
 export async function getPlanned(): Promise<PlannedItem[]> {
   const db = getDb();
-  const [followUpsRes, socialRes, goalsRes, closingsRes] = await Promise.all([
+  const [followUpsRes, socialRes, goalsRes, closingsRes, meetings] = await Promise.all([
     db.query<{ id: string; name: string; next_followup_at: string }>(
       `select id, name, next_followup_at from leads
        where next_followup_at >= date_trunc('day', now()) + interval '1 day'
@@ -358,6 +359,7 @@ export async function getPlanned(): Promise<PlannedItem[]> {
          and stage not in ('closed_won', 'closed_lost')
        order by expected_closing_date asc`
     ),
+    listMeetingsInNextDays(7),
   ]);
 
   const items: PlannedItem[] = [
@@ -385,6 +387,12 @@ export async function getPlanned(): Promise<PlannedItem[]> {
       text: `Expected closing`,
       href: `/pipeline/transactions/${r.id}`,
       source: "Pipeline",
+    })),
+    ...meetings.map((m): PlannedItem => ({
+      date: m.starts_at,
+      text: m.with_name ? `${m.title} — with ${m.with_name}` : m.title,
+      href: "/meetings",
+      source: m.location_type === "online" ? "Meeting (online)" : "Meeting (in person)",
     })),
   ];
 

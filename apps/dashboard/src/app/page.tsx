@@ -19,8 +19,10 @@
  * pretending this is more than rule-based composition.
  */
 import { RoleSwitcher } from "@/components/layout/role-switcher";
+import { NavPills } from "@/components/layout/nav-pills";
 import { BriefView } from "@/components/brief-view";
 import { composeBrief } from "@/lib/brief";
+import { listMeetingsToday } from "@/lib/meetings";
 import {
   getComplianceAlerts,
   getDashboardStats,
@@ -30,7 +32,6 @@ import {
   getReviewQueue,
   getTeamGoalsSummary,
 } from "@/lib/queries";
-import { cn } from "@/lib/utils";
 import {
   FOUNDER_ONLY_NOTES,
   ROLE_LABELS,
@@ -51,13 +52,14 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   const params = await searchParams;
   const role: DashboardRole = isDashboardRole(params.role) ? params.role : "owner_coo";
 
-  const [stats, reviewQueue, teamGoals, pipelineSummary, complianceAlerts, planned] = await Promise.all([
+  const [stats, reviewQueue, teamGoals, pipelineSummary, complianceAlerts, planned, todayMeetings] = await Promise.all([
     getDashboardStats(),
     getReviewQueue(),
     getTeamGoalsSummary(),
     getPipelineSummary(),
     getComplianceAlerts(),
     getPlanned(),
+    listMeetingsToday(),
   ]);
 
   const reviewQueueLeadIds = reviewQueue
@@ -86,6 +88,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
       complianceAlerts,
       pipelineSummary,
       teamGoals,
+      todayMeetings,
       greetingName: ROLE_LABELS[role],
     },
     leadNamesById
@@ -108,38 +111,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
             <RoleSwitcher current={role} />
           </div>
 
-          <nav className="flex flex-wrap gap-1.5">
-            {nav.map((item) => {
-              const pillClass = cn(
-                "rounded-full border px-2.5 py-1 text-xs font-medium",
-                item.key === "today"
-                  ? "border-primary/30 bg-primary/10 text-primary"
-                  : "border-border bg-muted text-muted-foreground"
-              );
-              // "live" items with an href are a different app entirely (Next.js
-              // Multi-Zones -- see next.config.ts's rewrites), not a route in
-              // this app, so a plain <a> is correct here, not next/link's Link.
-              if (item.status === "live" && item.href && item.key !== "today") {
-                return (
-                  <a
-                    key={item.key}
-                    href={item.href}
-                    className={cn(pillClass, "transition-colors hover:bg-accent")}
-                  >
-                    {item.label}
-                  </a>
-                );
-              }
-              return (
-                <span key={item.key} className={pillClass}>
-                  {item.label}
-                  {item.status === "planned" && (
-                    <span className="ml-1 text-[10px] opacity-70">(soon)</span>
-                  )}
-                </span>
-              );
-            })}
-          </nav>
+          <NavPills nav={nav} active="today" />
 
           {founderNote && (
             <p className="text-xs italic text-muted-foreground">{founderNote}</p>

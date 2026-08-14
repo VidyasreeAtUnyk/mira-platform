@@ -1,11 +1,16 @@
 /**
- * Read-only Postgres access for the shared schema (packages/shared-db).
+ * Postgres access for the shared schema (packages/shared-db) plus this
+ * app's own local tables (src/db/local-schema.sql).
  *
- * Unlike apps/lead-agent's src/db/client.ts, this module never applies
- * schema.sql -- the dashboard is a consumer of the shared data layer, not a
- * provisioner of it. If the database or tables don't exist yet, queries will
- * fail loudly (see the error boundary in src/app/error.tsx) rather than the
- * dashboard silently creating tables as a side effect of being loaded.
+ * Still never applies packages/shared-db/schema.sql itself -- dashboard
+ * remains a consumer of the shared Phase-0 data layer, not a provisioner
+ * of it; if those tables don't exist yet, queries against them still fail
+ * loudly (see src/app/error.tsx) rather than dashboard silently creating
+ * them. RESOLVED as of the Meetings feature: dashboard now genuinely owns
+ * one table (`meetings`) the same way apps/lead-agent owns run_state/
+ * run_metrics, so it needs the same idempotent "apply my own local schema
+ * on first connect" step those apps already have -- this is that, scoped
+ * strictly to local-schema.sql, not the shared one.
  *
  * No credentials are hardcoded (CLAUDE.md): DATABASE_URL must come from the
  * environment. The fallback below is a same-machine, no-password local dev
@@ -13,6 +18,9 @@
  * pattern apps/lead-agent uses -- not a production connection string.
  */
 import { Pool, types } from "pg";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 
 // pg returns `numeric` columns (budget_min/budget_max/price/avg_price) as
 // strings by default. This app only ever displays/sums/counts these for the
@@ -56,4 +64,24 @@ export function getDb(): Pool {
     pool = new Pool({ connectionString: databaseUrl });
   }
   return pool;
+}
+
+let localSchemaApplied: Promise<void> | null = null;
+
+/**
+ * Applies src/db/local-schema.sql idempotently (CREATE TABLE/INDEX IF NOT
+ * EXISTS -- safe to re-run) exactly once per process. Deliberately separate
+ * from getDb() rather than folded into it: every existing query in this app
+ * only ever touches tables from the shared Phase-0 schema, which already
+ * exist by the time dashboard runs (see this file's header) -- only
+ * src/lib/meetings.ts, the one genuinely dashboard-owned table, needs to
+ * call this before querying.
+ */
+export function ensureLocalSchema(): Promise<void> {
+  if (!localSchemaApplied) {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const LOCAL_SCHEMA_PATH = path.join(__dirname, "..", "db", "local-schema.sql");
+    localSchemaApplied = getDb().query(readFileSync(LOCAL_SCHEMA_PATH, "utf-8")).then(() => undefined);
+  }
+  return localSchemaApplied;
 }

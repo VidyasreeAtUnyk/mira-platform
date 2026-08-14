@@ -11,6 +11,7 @@
  */
 import type { NotificationTier } from "@mira/shared-types";
 import type { ComplianceAlert, PipelineStageCount, ReviewQueueItem, TeamGoalProgress } from "./queries";
+import type { Meeting } from "./meetings";
 
 export interface AttentionItem {
   text: string;
@@ -37,6 +38,7 @@ interface BriefInputs {
   complianceAlerts: ComplianceAlert[];
   pipelineSummary: { activeCount: number; byStage: PipelineStageCount[] };
   teamGoals: TeamGoalProgress[];
+  todayMeetings: Meeting[];
   greetingName: string;
 }
 
@@ -71,12 +73,13 @@ export function composeBrief(inputs: BriefInputs, leadNamesById: Map<string, str
     complianceAlerts,
     pipelineSummary,
     teamGoals,
+    todayMeetings,
     greetingName,
   } = inputs;
 
   const urgentCount = reviewQueue.filter((i) => i.tier === "urgent").length + complianceAlerts.filter((a) => a.urgency === "overdue").length;
   const todayCount = reviewQueue.filter((i) => i.tier === "today").length;
-  const totalNeedsAttention = urgentCount + todayCount + todayFollowUpsCount + coldLeadsCount;
+  const totalNeedsAttention = urgentCount + todayCount + todayFollowUpsCount + coldLeadsCount + todayMeetings.length;
 
   let mood: Brief["mood"];
   if (urgentCount > 0) mood = "busy";
@@ -98,6 +101,7 @@ export function composeBrief(inputs: BriefInputs, leadNamesById: Map<string, str
   const happened = happenedParts.length > 0 ? happenedParts.join(", ") : "not much logged yet this week";
 
   const nowParts: string[] = [];
+  if (todayMeetings.length > 0) nowParts.push(`${todayMeetings.length} meeting${todayMeetings.length === 1 ? "" : "s"} today`);
   if (todayFollowUpsCount > 0) nowParts.push(`${todayFollowUpsCount} follow-up${todayFollowUpsCount === 1 ? "" : "s"} due today`);
   if (reviewQueue.length > 0) nowParts.push(`${reviewQueue.length} item${reviewQueue.length === 1 ? "" : "s"} waiting on your review`);
   if (coldLeadsCount > 0) nowParts.push(`${coldLeadsCount} lead${coldLeadsCount === 1 ? "" : "s"} gone quiet`);
@@ -111,6 +115,15 @@ export function composeBrief(inputs: BriefInputs, leadNamesById: Map<string, str
   const summary = `This week: ${happened}. Right now: ${now}.${pipelineNote}`;
 
   const attention: AttentionItem[] = [];
+
+  for (const meeting of todayMeetings) {
+    const time = new Date(meeting.starts_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    attention.push({
+      text: `${time} — ${meeting.title}${meeting.with_name ? ` with ${meeting.with_name}` : ""}`,
+      tier: "today",
+      href: "/meetings",
+    });
+  }
 
   for (const item of reviewQueue) {
     if (item.tier === "fyi") continue;
