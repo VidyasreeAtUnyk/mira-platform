@@ -316,6 +316,82 @@ export interface ComplianceAlert {
  * MOU_EXPIRING_SOON_DAYS constant -- duplicated as a literal here rather
  * than imported, same module-boundary reasoning as the interfaces above.
  */
+export interface PlannedItem {
+  date: string;
+  text: string;
+  href: string | null;
+  noLinkReason?: string;
+  source: string;
+}
+
+/**
+ * What's coming in the next 7 days -- the "Planned" tab's data, separate
+ * from the Today brief's "what needs attention now" (getReviewQueue/
+ * getComplianceAlerts already cover "overdue or due today/soon"; this is
+ * strictly forward-looking, dated items). Pulled from every module that has
+ * a genuinely dated future event: lead follow-ups, scheduled social posts,
+ * goal periods ending, and transactions with an expected closing date.
+ */
+export async function getPlanned(): Promise<PlannedItem[]> {
+  const db = getDb();
+  const [followUpsRes, socialRes, goalsRes, closingsRes] = await Promise.all([
+    db.query<{ id: string; name: string; next_followup_at: string }>(
+      `select id, name, next_followup_at from leads
+       where next_followup_at >= date_trunc('day', now()) + interval '1 day'
+         and next_followup_at < now() + interval '7 days'
+       order by next_followup_at asc`
+    ),
+    db.query<{ id: string; kind: string; platform: string; scheduled_for: string }>(
+      `select id, kind, platform, scheduled_for from social_posts
+       where scheduled_for >= now() and scheduled_for < now() + interval '7 days'
+         and status in ('approved', 'pending_approval')
+       order by scheduled_for asc`
+    ),
+    db.query<{ id: string; metric: string; period_end: string }>(
+      `select id, metric, period_end from goals
+       where status = 'active' and period_end >= current_date and period_end < current_date + interval '7 days'
+       order by period_end asc`
+    ),
+    db.query<{ id: string; lead_id: string; expected_closing_date: string }>(
+      `select id, lead_id, expected_closing_date from transactions
+       where expected_closing_date >= current_date and expected_closing_date < current_date + interval '7 days'
+         and stage not in ('closed_won', 'closed_lost')
+       order by expected_closing_date asc`
+    ),
+  ]);
+
+  const items: PlannedItem[] = [
+    ...followUpsRes.rows.map((r): PlannedItem => ({
+      date: r.next_followup_at,
+      text: `Follow up with ${r.name}`,
+      href: null,
+      noLinkReason: "CRM isn't cross-linked here yet",
+      source: "CRM",
+    })),
+    ...socialRes.rows.map((r): PlannedItem => ({
+      date: r.scheduled_for,
+      text: `${r.kind.replace(/_/g, " ")} post scheduled — ${r.platform}`,
+      href: "/social/calendar",
+      source: "Social",
+    })),
+    ...goalsRes.rows.map((r): PlannedItem => ({
+      date: r.period_end,
+      text: `Goal period ends — ${r.metric.replace(/_/g, " ")}`,
+      href: "/trackers",
+      source: "Trackers",
+    })),
+    ...closingsRes.rows.map((r): PlannedItem => ({
+      date: r.expected_closing_date,
+      text: `Expected closing`,
+      href: `/pipeline/transactions/${r.id}`,
+      source: "Pipeline",
+    })),
+  ];
+
+  items.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  return items;
+}
+
 export async function getComplianceAlerts(): Promise<ComplianceAlert[]> {
   const db = getDb();
   const res = await db.query<{ id: string; name: string; term_end: string; urgency: "overdue" | "expiring_soon" }>(
